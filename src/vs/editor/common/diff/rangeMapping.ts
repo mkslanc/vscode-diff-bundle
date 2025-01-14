@@ -294,10 +294,7 @@ export class RangeMapping {
 	/**
 	 * Creates a single text edit that describes the change from the original to the modified text.
 	*/
-	public toTextEdit(modified: AbstractText): SingleTextEdit {
-		const newText = modified.getValueOfRange(this.modifiedRange);
-		return new SingleTextEdit(this.originalRange, newText);
-	}
+
 
 	public join(other: RangeMapping): RangeMapping {
 		return new RangeMapping(

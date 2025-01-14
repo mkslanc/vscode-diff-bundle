@@ -628,27 +628,7 @@ function getActualStartIndex<T>(array: T[], start: number): number {
 */
 export type CompareResult = number;
 
-export namespace CompareResult {
-	export function isLessThan(result: CompareResult): boolean {
-		return result < 0;
-	}
 
-	export function isLessThanOrEqual(result: CompareResult): boolean {
-		return result <= 0;
-	}
-
-	export function isGreaterThan(result: CompareResult): boolean {
-		return result > 0;
-	}
-
-	export function isNeitherLessOrGreaterThan(result: CompareResult): boolean {
-		return result === 0;
-	}
-
-	export const greaterThan = 1;
-	export const lessThan = -1;
-	export const neitherLessOrGreaterThan = 0;
-}
 
 /**
  * A comparator `c` defines a total order `<=` on `T` as following:
@@ -768,78 +748,7 @@ export class ArrayQueue<T> {
 /**
  * This class is faster than an iterator and array for lazy computed data.
 */
-export class CallbackIterable<T> {
-	public static readonly empty = new CallbackIterable<never>(_callback => { });
 
-	constructor(
-		/**
-		 * Calls the callback for every item.
-		 * Stops when the callback returns false.
-		*/
-		public readonly iterate: (callback: (item: T) => boolean) => void
-	) {
-	}
-
-	forEach(handler: (item: T) => void) {
-		this.iterate(item => { handler(item); return true; });
-	}
-
-	toArray(): T[] {
-		const result: T[] = [];
-		this.iterate(item => { result.push(item); return true; });
-		return result;
-	}
-
-	filter(predicate: (item: T) => boolean): CallbackIterable<T> {
-		return new CallbackIterable(cb => this.iterate(item => predicate(item) ? cb(item) : true));
-	}
-
-	map<TResult>(mapFn: (item: T) => TResult): CallbackIterable<TResult> {
-		return new CallbackIterable<TResult>(cb => this.iterate(item => cb(mapFn(item))));
-	}
-
-	some(predicate: (item: T) => boolean): boolean {
-		let result = false;
-		this.iterate(item => { result = predicate(item); return !result; });
-		return result;
-	}
-
-	findFirst(predicate: (item: T) => boolean): T | undefined {
-		let result: T | undefined;
-		this.iterate(item => {
-			if (predicate(item)) {
-				result = item;
-				return false;
-			}
-			return true;
-		});
-		return result;
-	}
-
-	findLast(predicate: (item: T) => boolean): T | undefined {
-		let result: T | undefined;
-		this.iterate(item => {
-			if (predicate(item)) {
-				result = item;
-			}
-			return true;
-		});
-		return result;
-	}
-
-	findLastMaxBy(comparator: Comparator<T>): T | undefined {
-		let result: T | undefined;
-		let first = true;
-		this.iterate(item => {
-			if (first || CompareResult.isGreaterThan(comparator(item, result!))) {
-				first = false;
-				result = item;
-			}
-			return true;
-		});
-		return result;
-	}
-}
 
 /**
  * Represents a re-arrangement of items in an array.

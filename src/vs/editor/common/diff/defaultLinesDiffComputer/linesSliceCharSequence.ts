@@ -185,13 +185,13 @@ export class LinesSliceCharSequence implements ISequence {
 }
 
 function isWordChar(charCode: number): boolean {
-	return charCode >= CharCode.a && charCode <= CharCode.z
-		|| charCode >= CharCode.A && charCode <= CharCode.Z
-		|| charCode >= CharCode.Digit0 && charCode <= CharCode.Digit9;
+	return charCode >= 97 && charCode <= 122
+		|| charCode >= 65 && charCode <= 90
+		|| charCode >= 48 && charCode <= 57;
 }
 
 function isUpperCase(charCode: number): boolean {
-	return charCode >= CharCode.A && charCode <= CharCode.Z;
+	return charCode >= 65 && charCode <= 90;
 }
 
 const enum CharBoundaryCategory {
@@ -223,21 +223,21 @@ function getCategoryBoundaryScore(category: CharBoundaryCategory): number {
 }
 
 function getCategory(charCode: number): CharBoundaryCategory {
-	if (charCode === CharCode.LineFeed) {
+	if (charCode === 10) {
 		return CharBoundaryCategory.LineBreakLF;
-	} else if (charCode === CharCode.CarriageReturn) {
+	} else if (charCode === 13) {
 		return CharBoundaryCategory.LineBreakCR;
 	} else if (isSpace(charCode)) {
 		return CharBoundaryCategory.Space;
-	} else if (charCode >= CharCode.a && charCode <= CharCode.z) {
+	} else if (charCode >= 97 && charCode <= 122) {
 		return CharBoundaryCategory.WordLower;
-	} else if (charCode >= CharCode.A && charCode <= CharCode.Z) {
+	} else if (charCode >= 65 && charCode <= 90) {
 		return CharBoundaryCategory.WordUpper;
-	} else if (charCode >= CharCode.Digit0 && charCode <= CharCode.Digit9) {
+	} else if (charCode >= 48 && charCode <= 57) {
 		return CharBoundaryCategory.WordNumber;
 	} else if (charCode === -1) {
 		return CharBoundaryCategory.End;
-	} else if (charCode === CharCode.Comma || charCode === CharCode.Semicolon) {
+	} else if (charCode === 44 || charCode === 59) {
 		return CharBoundaryCategory.Separator;
 	} else {
 		return CharBoundaryCategory.Other;

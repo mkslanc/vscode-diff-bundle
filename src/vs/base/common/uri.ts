@@ -511,27 +511,27 @@ class Uri extends URI {
 
 // reserved characters: https://tools.ietf.org/html/rfc3986#section-2.2
 const encodeTable: { [ch: number]: string } = {
-	[CharCode.Colon]: '%3A', // gen-delims
-	[CharCode.Slash]: '%2F',
-	[CharCode.QuestionMark]: '%3F',
-	[CharCode.Hash]: '%23',
-	[CharCode.OpenSquareBracket]: '%5B',
-	[CharCode.CloseSquareBracket]: '%5D',
-	[CharCode.AtSign]: '%40',
+	[58]: '%3A', // gen-delims
+	[47]: '%2F',
+	[63]: '%3F',
+	[35]: '%23',
+	[91]: '%5B',
+	[93]: '%5D',
+	[64]: '%40',
 
-	[CharCode.ExclamationMark]: '%21', // sub-delims
-	[CharCode.DollarSign]: '%24',
-	[CharCode.Ampersand]: '%26',
-	[CharCode.SingleQuote]: '%27',
-	[CharCode.OpenParen]: '%28',
-	[CharCode.CloseParen]: '%29',
-	[CharCode.Asterisk]: '%2A',
-	[CharCode.Plus]: '%2B',
-	[CharCode.Comma]: '%2C',
-	[CharCode.Semicolon]: '%3B',
-	[CharCode.Equals]: '%3D',
+	[33]: '%21', // sub-delims
+	[36]: '%24',
+	[38]: '%26',
+	[39]: '%27',
+	[40]: '%28',
+	[41]: '%29',
+	[42]: '%2A',
+	[43]: '%2B',
+	[44]: '%2C',
+	[59]: '%3B',
+	[61]: '%3D',
 
-	[CharCode.Space]: '%20',
+	[32]: '%20',
 };
 
 function encodeURIComponentFast(uriComponent: string, isPath: boolean, isAuthority: boolean): string {
@@ -543,17 +543,17 @@ function encodeURIComponentFast(uriComponent: string, isPath: boolean, isAuthori
 
 		// unreserved characters: https://tools.ietf.org/html/rfc3986#section-2.3
 		if (
-			(code >= CharCode.a && code <= CharCode.z)
-			|| (code >= CharCode.A && code <= CharCode.Z)
-			|| (code >= CharCode.Digit0 && code <= CharCode.Digit9)
-			|| code === CharCode.Dash
-			|| code === CharCode.Period
-			|| code === CharCode.Underline
-			|| code === CharCode.Tilde
-			|| (isPath && code === CharCode.Slash)
-			|| (isAuthority && code === CharCode.OpenSquareBracket)
-			|| (isAuthority && code === CharCode.CloseSquareBracket)
-			|| (isAuthority && code === CharCode.Colon)
+			(code >= 97 && code <= 122)
+			|| (code >= 65 && code <= 90)
+			|| (code >= 48 && code <= 57)
+			|| code === 45
+			|| code === 46
+			|| code === 95
+			|| code === 126
+			|| (isPath && code === 47)
+			|| (isAuthority && code === 91)
+			|| (isAuthority && code === 93)
+			|| (isAuthority && code === 58)
 		) {
 			// check if we are delaying native encode
 			if (nativeEncodePos !== -1) {
@@ -602,7 +602,7 @@ function encodeURIComponentMinimal(path: string): string {
 	let res: string | undefined = undefined;
 	for (let pos = 0; pos < path.length; pos++) {
 		const code = path.charCodeAt(pos);
-		if (code === CharCode.Hash || code === CharCode.QuestionMark) {
+		if (code === 35 || code === 63) {
 			if (res === undefined) {
 				res = path.substr(0, pos);
 			}
@@ -626,9 +626,9 @@ export function uriToFsPath(uri: URI, keepDriveLetterCasing: boolean): string {
 		// unc path: file://shares/c$/far/boo
 		value = `//${uri.authority}${uri.path}`;
 	} else if (
-		uri.path.charCodeAt(0) === CharCode.Slash
-		&& (uri.path.charCodeAt(1) >= CharCode.A && uri.path.charCodeAt(1) <= CharCode.Z || uri.path.charCodeAt(1) >= CharCode.a && uri.path.charCodeAt(1) <= CharCode.z)
-		&& uri.path.charCodeAt(2) === CharCode.Colon
+		uri.path.charCodeAt(0) === 47
+		&& (uri.path.charCodeAt(1) >= 65 && uri.path.charCodeAt(1) <= 90 || uri.path.charCodeAt(1) >= 97 && uri.path.charCodeAt(1) <= 122)
+		&& uri.path.charCodeAt(2) === 58
 	) {
 		if (!keepDriveLetterCasing) {
 			// windows drive letter: file:///c:/far/boo
@@ -694,14 +694,14 @@ function _asFormatted(uri: URI, skipEncoding: boolean): string {
 	}
 	if (path) {
 		// lower-case windows drive letters in /C:/fff or C:/fff
-		if (path.length >= 3 && path.charCodeAt(0) === CharCode.Slash && path.charCodeAt(2) === CharCode.Colon) {
+		if (path.length >= 3 && path.charCodeAt(0) === 47 && path.charCodeAt(2) === 58) {
 			const code = path.charCodeAt(1);
-			if (code >= CharCode.A && code <= CharCode.Z) {
+			if (code >= 65 && code <= 90) {
 				path = `/${String.fromCharCode(code + 32)}:${path.substr(3)}`; // "/c:".length === 3
 			}
-		} else if (path.length >= 2 && path.charCodeAt(1) === CharCode.Colon) {
+		} else if (path.length >= 2 && path.charCodeAt(1) === 58) {
 			const code = path.charCodeAt(0);
-			if (code >= CharCode.A && code <= CharCode.Z) {
+			if (code >= 65 && code <= 90) {
 				path = `${String.fromCharCode(code + 32)}:${path.substr(2)}`; // "/c:".length === 3
 			}
 		}

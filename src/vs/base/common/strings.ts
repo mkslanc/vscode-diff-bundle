@@ -273,7 +273,7 @@ export function splitLinesIncludeSeparators(str: string): string[] {
 export function firstNonWhitespaceIndex(str: string): number {
 	for (let i = 0, len = str.length; i < len; i++) {
 		const chCode = str.charCodeAt(i);
-		if (chCode !== CharCode.Space && chCode !== CharCode.Tab) {
+		if (chCode !== 32 && chCode !== 9) {
 			return i;
 		}
 	}
@@ -287,7 +287,7 @@ export function firstNonWhitespaceIndex(str: string): number {
 export function getLeadingWhitespace(str: string, start: number = 0, end: number = str.length): string {
 	for (let i = start; i < end; i++) {
 		const chCode = str.charCodeAt(i);
-		if (chCode !== CharCode.Space && chCode !== CharCode.Tab) {
+		if (chCode !== 32 && chCode !== 9) {
 			return str.substring(start, i);
 		}
 	}
@@ -301,7 +301,7 @@ export function getLeadingWhitespace(str: string, start: number = 0, end: number
 export function lastNonWhitespaceIndex(str: string, startIndex: number = str.length - 1): number {
 	for (let i = startIndex; i >= 0; i--) {
 		const chCode = str.charCodeAt(i);
-		if (chCode !== CharCode.Space && chCode !== CharCode.Tab) {
+		if (chCode !== 32 && chCode !== 9) {
 			return i;
 		}
 	}
@@ -419,15 +419,15 @@ export function compareSubstringIgnoreCase(a: string, b: string, aStart: number 
 }
 
 export function isAsciiDigit(code: number): boolean {
-	return code >= CharCode.Digit0 && code <= CharCode.Digit9;
+	return code >= 48 && code <= 57;
 }
 
 export function isLowerAsciiLetter(code: number): boolean {
-	return code >= CharCode.a && code <= CharCode.z;
+	return code >= 97 && code <= 122;
 }
 
 export function isUpperAsciiLetter(code: number): boolean {
-	return code >= CharCode.A && code <= CharCode.Z;
+	return code >= 65 && code <= 90;
 }
 
 export function equalsIgnoreCase(a: string, b: string): boolean {
@@ -828,10 +828,10 @@ export function removeAnsiEscapeCodesFromPrompt(str: string): string {
 
 // -- UTF-8 BOM
 
-export const UTF8_BOM_CHARACTER = String.fromCharCode(CharCode.UTF8_BOM);
+export const UTF8_BOM_CHARACTER = String.fromCharCode(65279);
 
 export function startsWithUTF8BOM(str: string): boolean {
-	return !!(str && str.length > 0 && str.charCodeAt(0) === CharCode.UTF8_BOM);
+	return !!(str && str.length > 0 && str.charCodeAt(0) === 65279);
 }
 
 export function stripUTF8BOM(str: string): string {
@@ -912,15 +912,15 @@ export function getNLines(str: string, n = 1): string {
  * Produces 'a'-'z', followed by 'A'-'Z'... followed by 'a'-'z', etc.
  */
 export function singleLetterHash(n: number): string {
-	const LETTERS_CNT = (CharCode.Z - CharCode.A + 1);
+	const LETTERS_CNT = (90 - 65 + 1);
 
 	n = n % (2 * LETTERS_CNT);
 
 	if (n < LETTERS_CNT) {
-		return String.fromCharCode(CharCode.a + n);
+		return String.fromCharCode(97 + n);
 	}
 
-	return String.fromCharCode(CharCode.A + n - LETTERS_CNT);
+	return String.fromCharCode(65 + n - LETTERS_CNT);
 }
 
 //#region Unicode Grapheme Break
@@ -1047,10 +1047,10 @@ class GraphemeBreakTree {
 	public getGraphemeBreakType(codePoint: number): GraphemeBreakType {
 		// !!! Let's make 7bit ASCII a bit faster: 0..31
 		if (codePoint < 32) {
-			if (codePoint === CharCode.LineFeed) {
+			if (codePoint === 10) {
 				return GraphemeBreakType.LF;
 			}
-			if (codePoint === CharCode.CarriageReturn) {
+			if (codePoint === 13) {
 				return GraphemeBreakType.CR;
 			}
 			return GraphemeBreakType.Control;

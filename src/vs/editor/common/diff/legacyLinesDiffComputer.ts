@@ -188,7 +188,7 @@ class LineSequence implements ISequence {
 			}
 			if (!shouldIgnoreTrimWhitespace && index < endIndex) {
 				// Add \n if trim whitespace is not ignored
-				charCodes[len] = CharCode.LineFeed;
+				charCodes[len] = 10;
 				lineNumbers[len] = index + 1;
 				columns[len] = lineContent.length + 1;
 				len++;
@@ -212,7 +212,7 @@ class CharSequence implements ISequence {
 
 	public toString() {
 		return (
-			'[' + this._charCodes.map((s, idx) => (s === CharCode.LineFeed ? '\\n' : String.fromCharCode(s)) + `-(${this._lineNumbers[idx]},${this._columns[idx]})`).join(', ') + ']'
+			'[' + this._charCodes.map((s, idx) => (s === 10 ? '\\n' : String.fromCharCode(s)) + `-(${this._lineNumbers[idx]},${this._columns[idx]})`).join(', ') + ']'
 		);
 	}
 
@@ -245,7 +245,7 @@ class CharSequence implements ISequence {
 		}
 		this._assertIndex(i, this._lineNumbers);
 
-		if (this._charCodes[i] === CharCode.LineFeed) {
+		if (this._charCodes[i] === 10) {
 			return this._lineNumbers[i] + 1;
 		}
 		return this._lineNumbers[i];
@@ -269,7 +269,7 @@ class CharSequence implements ISequence {
 		}
 		this._assertIndex(i, this._columns);
 
-		if (this._charCodes[i] === CharCode.LineFeed) {
+		if (this._charCodes[i] === 10) {
 			return 1;
 		}
 		return this._columns[i] + 1;

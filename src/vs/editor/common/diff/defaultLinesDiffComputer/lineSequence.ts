@@ -38,7 +38,7 @@ export class LineSequence implements ISequence {
 
 function getIndentation(str: string): number {
 	let i = 0;
-	while (i < str.length && (str.charCodeAt(i) === CharCode.Space || str.charCodeAt(i) === CharCode.Tab)) {
+	while (i < str.length && (str.charCodeAt(i) === 32 || str.charCodeAt(i) === 9)) {
 		i++;
 	}
 	return i;

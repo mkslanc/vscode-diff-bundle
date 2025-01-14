@@ -48,13 +48,7 @@ export function softAssert(condition: boolean): void {
  * condition must be side-effect free!
  */
 export function assertFn(condition: () => boolean): void {
-	if (!condition()) {
-		// eslint-disable-next-line no-debugger
-		debugger;
-		// Reevaluate `condition` again to make debugging easier
-		condition();
-		onUnexpectedError(new BugIndicatingError('Assertion Failed'));
-	}
+	condition();
 }
 
 export function checkAdjacentItems<T>(items: readonly T[], predicate: (item1: T, item2: T) => boolean): boolean {

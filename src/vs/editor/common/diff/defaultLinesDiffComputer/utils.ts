@@ -24,7 +24,7 @@ export class Array2D<T> {
 }
 
 export function isSpace(charCode: number): boolean {
-	return charCode === CharCode.Space || charCode === CharCode.Tab;
+	return charCode === 32 || charCode === 9;
 }
 
 export class LineRangeFragment {
