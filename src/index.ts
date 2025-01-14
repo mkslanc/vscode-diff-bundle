@@ -1,19 +1,21 @@
 import {ILinesDiffComputerOptions} from "vs/editor/common/diff/linesDiffComputer";
-import {StandardLinesDiffComputer} from "vs/editor/common/diff/standardLinesDiffComputer";
+import {DefaultLinesDiffComputer} from "vs/editor/common/diff/defaultLinesDiffComputer/defaultLinesDiffComputer";
 
 export function computeDiff(originalLines: string[], modifiedLines: string[], options: ILinesDiffComputerOptions) {
-    let diffComputer = new StandardLinesDiffComputer();
-    return diffComputer.computeDiff(originalLines, modifiedLines, options)?.changes.map((changes) => {
+    let diffComputer = new DefaultLinesDiffComputer();
+    var result = diffComputer.computeDiff(originalLines, modifiedLines, options);
+    console.log(result.moves)
+    return result?.changes.map((changes) => {
         let originalStartLineNumber;
         let originalEndLineNumber;
         let modifiedStartLineNumber;
         let modifiedEndLineNumber;
         let innerChanges = changes.innerChanges;
         
-        originalStartLineNumber = changes.originalRange.startLineNumber - 1;
-        originalEndLineNumber = changes.originalRange.endLineNumberExclusive - 1;
-        modifiedStartLineNumber = changes.modifiedRange.startLineNumber - 1;
-        modifiedEndLineNumber = changes.modifiedRange.endLineNumberExclusive - 1;
+        originalStartLineNumber = changes.original.startLineNumber - 1;
+        originalEndLineNumber = changes.original.endLineNumberExclusive - 1;
+        modifiedStartLineNumber = changes.modified.startLineNumber - 1;
+        modifiedEndLineNumber = changes.modified.endLineNumberExclusive - 1;
         return {
             origStart: originalStartLineNumber,
             origEnd: originalEndLineNumber,

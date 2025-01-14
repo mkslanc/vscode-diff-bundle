@@ -5,14 +5,15 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "devDependencies": {
-    "swc-loader": "^0.2.3",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.0.4",
-    "webpack": "^5.82.1",
-    "webpack-cli": "^5.1.1"
+    "nyc": "^17.1.0",
+    "pkgroll": "^2.5.1",
+    "typescript": "^5.7.2"
   },
   "scripts": {
-    "build": "webpack"
+    "download": "npx tsx download.js",
+    "optimize": "npx tsx optimize.js",
+    "build": "pkgroll",
+    "test": "npx nyc node test.js && npx nyc report --reporter=html"
   },
   "license": "MIT"
 }
