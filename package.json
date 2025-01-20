@@ -13,7 +13,8 @@
     "download": "npx tsx download.js",
     "optimize": "npx tsx optimize.js",
     "build": "pkgroll",
-    "test": "npx nyc node test.js && npx nyc report --reporter=html"
+    "test": "npx nyc node test.js && npx nyc report --reporter=html",
+    "check": "tsc"
   },
   "license": "MIT"
 }

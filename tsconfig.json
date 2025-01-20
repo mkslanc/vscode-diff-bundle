@@ -13,8 +13,7 @@
       "strictNullChecks": false,
       "noImplicitAny": false,
       "allowArbitraryExtensions": true,
-      
-
+      "noEmit": true,
       "paths": {
         "vs/*": [
           "./src/vs/*"
