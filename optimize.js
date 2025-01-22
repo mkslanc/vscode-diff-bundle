@@ -1,7 +1,7 @@
 var CharCode = require("./src/vs/base/common/charCode.ts").CharCode
 var fs = require("fs")
 var path = require("path")
-var runCleanUp = require("clean_unused").runCleanUp;
+var runCleanUp = require("./clean_unused").runCleanUp;
 
 function replaceInFiles(path, fn) {
     var stat = fs.statSync(path)
