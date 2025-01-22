@@ -3,27 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Comparator } from './arrays.js';
-
-export function findLast<T>(array: readonly T[], predicate: (item: T) => boolean): T | undefined {
-	const idx = findLastIdx(array, predicate);
-	if (idx === -1) {
-		return undefined;
-	}
-	return array[idx];
-}
-
-export function findLastIdx<T>(array: readonly T[], predicate: (item: T) => boolean, fromIndex = array.length - 1): number {
-	for (let i = fromIndex; i >= 0; i--) {
-		const element = array[i];
-
-		if (predicate(element)) {
-			return i;
-		}
-	}
-
-	return -1;
-}
 
 /**
  * Finds the last item where predicate is true using binary search.
@@ -87,11 +66,6 @@ export function findFirstIdxMonotonousOrArrLen<T>(array: readonly T[], predicate
 	return i;
 }
 
-export function findFirstIdxMonotonous<T>(array: readonly T[], predicate: (item: T) => boolean, startIdx = 0, endIdxEx = array.length): number {
-	const idx = findFirstIdxMonotonousOrArrLen(array, predicate, startIdx, endIdxEx);
-	return idx === array.length ? -1 : idx;
-}
-
 /**
  * Use this when
  * * You have a sorted array
@@ -127,76 +101,4 @@ export class MonotonousArray<T> {
 		this._findLastMonotonousLastIdx = idx + 1;
 		return idx === -1 ? undefined : this._array[idx];
 	}
-}
-
-/**
- * Returns the first item that is equal to or greater than every other item.
-*/
-export function findFirstMax<T>(array: readonly T[], comparator: Comparator<T>): T | undefined {
-	if (array.length === 0) {
-		return undefined;
-	}
-
-	let max = array[0];
-	for (let i = 1; i < array.length; i++) {
-		const item = array[i];
-		if (comparator(item, max) > 0) {
-			max = item;
-		}
-	}
-	return max;
-}
-
-/**
- * Returns the last item that is equal to or greater than every other item.
-*/
-export function findLastMax<T>(array: readonly T[], comparator: Comparator<T>): T | undefined {
-	if (array.length === 0) {
-		return undefined;
-	}
-
-	let max = array[0];
-	for (let i = 1; i < array.length; i++) {
-		const item = array[i];
-		if (comparator(item, max) >= 0) {
-			max = item;
-		}
-	}
-	return max;
-}
-
-/**
- * Returns the first item that is equal to or less than every other item.
-*/
-export function findFirstMin<T>(array: readonly T[], comparator: Comparator<T>): T | undefined {
-	return findFirstMax(array, (a, b) => -comparator(a, b));
-}
-
-export function findMaxIdx<T>(array: readonly T[], comparator: Comparator<T>): number {
-	if (array.length === 0) {
-		return -1;
-	}
-
-	let maxIdx = 0;
-	for (let i = 1; i < array.length; i++) {
-		const item = array[i];
-		if (comparator(item, array[maxIdx]) > 0) {
-			maxIdx = i;
-		}
-	}
-	return maxIdx;
-}
-
-/**
- * Returns the first mapped value of the array which is not undefined.
- */
-export function mapFindFirst<T, R>(items: Iterable<T>, mapFn: (value: T) => R | undefined): R | undefined {
-	for (const value of items) {
-		const mapped = mapFn(value);
-		if (mapped !== undefined) {
-			return mapped;
-		}
-	}
-
-	return undefined;
 }

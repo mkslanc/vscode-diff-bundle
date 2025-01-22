@@ -324,32 +324,6 @@ export function transaction(fn: (tx: ITransaction) => void, getDebugName?: () =>
 	}
 }
 
-let _globalTransaction: ITransaction | undefined = undefined;
-
-export function globalTransaction(fn: (tx: ITransaction) => void) {
-	if (_globalTransaction) {
-		fn(_globalTransaction);
-	} else {
-		const tx = new TransactionImpl(fn, undefined);
-		_globalTransaction = tx;
-		try {
-			fn(tx);
-		} finally {
-			tx.finish(); // During finish, more actions might be added to the transaction.
-			// Which is why we only clear the global transaction after finish.
-			_globalTransaction = undefined;
-		}
-	}
-}
-
-export async function asyncTransaction(fn: (tx: ITransaction) => Promise<void>, getDebugName?: () => string): Promise<void> {
-	const tx = new TransactionImpl(fn, getDebugName);
-	try {
-		await fn(tx);
-	} finally {
-		tx.finish();
-	}
-}
 
 /**
  * Allows to chain transactions.
@@ -471,20 +445,6 @@ export class ObservableValue<T, TChange = void>
 	protected _setValue(newValue: T): void {
 		this._value = newValue;
 	}
-}
-
-/**
- * A disposable observable. When disposed, its value is also disposed.
- * When a new value is set, the previous value is disposed.
- */
-export function disposableObservableValue<T extends IDisposable | undefined, TChange = void>(nameOrOwner: string | object, initialValue: T): ISettableObservable<T, TChange> & IDisposable {
-	let debugNameData: DebugNameData;
-	if (typeof nameOrOwner === 'string') {
-		debugNameData = new DebugNameData(undefined, nameOrOwner, undefined);
-	} else {
-		debugNameData = new DebugNameData(nameOrOwner, undefined, undefined);
-	}
-	return new DisposableObservableValue(debugNameData, initialValue, strictEquals);
 }
 
 export class DisposableObservableValue<T extends IDisposable | undefined, TChange = void> extends ObservableValue<T, TChange> implements IDisposable {

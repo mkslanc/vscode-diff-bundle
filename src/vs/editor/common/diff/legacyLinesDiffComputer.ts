@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CharCode } from '../../../base/common/charCode.js';
 import { IDiffChange, ISequence, LcsDiff, IDiffResult } from '../../../base/common/diff/diff.js';
 import { ILinesDiffComputer, ILinesDiffComputerOptions, LinesDiff } from './linesDiffComputer.js';
 import { RangeMapping, DetailedLineRangeMapping } from './rangeMapping.js';

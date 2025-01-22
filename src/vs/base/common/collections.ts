@@ -32,55 +32,6 @@ export function groupBy<K extends string | number | symbol, V>(data: V[], groupF
 	return result;
 }
 
-export function diffSets<T>(before: ReadonlySet<T>, after: ReadonlySet<T>): { removed: T[]; added: T[] } {
-	const removed: T[] = [];
-	const added: T[] = [];
-	for (const element of before) {
-		if (!after.has(element)) {
-			removed.push(element);
-		}
-	}
-	for (const element of after) {
-		if (!before.has(element)) {
-			added.push(element);
-		}
-	}
-	return { removed, added };
-}
-
-export function diffMaps<K, V>(before: Map<K, V>, after: Map<K, V>): { removed: V[]; added: V[] } {
-	const removed: V[] = [];
-	const added: V[] = [];
-	for (const [index, value] of before) {
-		if (!after.has(index)) {
-			removed.push(value);
-		}
-	}
-	for (const [index, value] of after) {
-		if (!before.has(index)) {
-			added.push(value);
-		}
-	}
-	return { removed, added };
-}
-
-/**
- * Computes the intersection of two sets.
- *
- * @param setA - The first set.
- * @param setB - The second iterable.
- * @returns A new set containing the elements that are in both `setA` and `setB`.
- */
-export function intersection<T>(setA: Set<T>, setB: Iterable<T>): Set<T> {
-	const result = new Set<T>();
-	for (const elem of setB) {
-		if (setA.has(elem)) {
-			result.add(elem);
-		}
-	}
-	return result;
-}
-
 export class SetWithKey<T> implements Set<T> {
 	private _map = new Map<any, T>();
 

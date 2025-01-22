@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Emitter, Event } from './event.js';
-import { DisposableStore, IDisposable } from './lifecycle.js';
+import { IDisposable } from './lifecycle.js';
 
 export interface CancellationToken {
 
@@ -30,20 +30,6 @@ const shortcutEvent: Event<any> = Object.freeze(function (callback, context?): I
 });
 
 export namespace CancellationToken {
-
-	export function isCancellationToken(thing: unknown): thing is CancellationToken {
-		if (thing === CancellationToken.None || thing === CancellationToken.Cancelled) {
-			return true;
-		}
-		if (thing instanceof MutableToken) {
-			return true;
-		}
-		if (!thing || typeof thing !== 'object') {
-			return false;
-		}
-		return typeof (thing as CancellationToken).isCancellationRequested === 'boolean'
-			&& typeof (thing as CancellationToken).onCancellationRequested === 'function';
-	}
 
 
 	export const None = Object.freeze<CancellationToken>({
@@ -97,10 +83,8 @@ class MutableToken implements CancellationToken {
 export class CancellationTokenSource {
 
 	private _token?: CancellationToken = undefined;
-	private _parentListener?: IDisposable = undefined;
 
 	constructor(parent?: CancellationToken) {
-		this._parentListener = parent && parent.onCancellationRequested(this.cancel, this);
 	}
 
 	get token(): CancellationToken {
@@ -111,38 +95,4 @@ export class CancellationTokenSource {
 		}
 		return this._token;
 	}
-
-	cancel(): void {
-		if (!this._token) {
-			// save an object by returning the default
-			// cancelled token when cancellation happens
-			// before someone asks for the token
-			this._token = CancellationToken.Cancelled;
-
-		} else if (this._token instanceof MutableToken) {
-			// actually cancel
-			this._token.cancel();
-		}
-	}
-
-	dispose(cancel: boolean = false): void {
-		if (cancel) {
-			this.cancel();
-		}
-		this._parentListener?.dispose();
-		if (!this._token) {
-			// ensure to initialize with an empty token if we had none
-			this._token = CancellationToken.None;
-
-		} else if (this._token instanceof MutableToken) {
-			// actually dispose
-			this._token.dispose();
-		}
-	}
-}
-
-export function cancelOnDispose(store: DisposableStore): CancellationToken {
-	const source = new CancellationTokenSource();
-	store.add({ dispose() { source.cancel(); } });
-	return source.token;
 }

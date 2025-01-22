@@ -121,15 +121,6 @@ export const enum Platform {
 }
 export type PlatformName = 'Web' | 'Windows' | 'Mac' | 'Linux';
 
-export function PlatformToString(platform: Platform): PlatformName {
-	switch (platform) {
-		case Platform.Web: return 'Web';
-		case Platform.Mac: return 'Mac';
-		case Platform.Linux: return 'Linux';
-		case Platform.Windows: return 'Windows';
-	}
-}
-
 let _platform: Platform = Platform.Web;
 if (_isMacintosh) {
 	_platform = Platform.Mac;
@@ -166,24 +157,6 @@ export const userAgent = _userAgent;
 export const language = _language;
 
 export namespace Language {
-
-	export function value(): string {
-		return language;
-	}
-
-	export function isDefaultVariant(): boolean {
-		if (language.length === 2) {
-			return language === 'en';
-		} else if (language.length >= 3) {
-			return language[0] === 'e' && language[1] === 'n' && language[2] === '-';
-		} else {
-			return false;
-		}
-	}
-
-	export function isDefault(): boolean {
-		return language === 'en';
-	}
 }
 
 /**
@@ -255,26 +228,9 @@ export const enum OperatingSystem {
 }
 export const OS = (_isMacintosh || _isIOS ? OperatingSystem.Macintosh : (_isWindows ? OperatingSystem.Windows : OperatingSystem.Linux));
 
-let _isLittleEndian = true;
-let _isLittleEndianComputed = false;
-export function isLittleEndian(): boolean {
-	if (!_isLittleEndianComputed) {
-		_isLittleEndianComputed = true;
-		const test = new Uint8Array(2);
-		test[0] = 1;
-		test[1] = 2;
-		const view = new Uint16Array(test.buffer);
-		_isLittleEndian = (view[0] === (2 << 8) + 1);
-	}
-	return _isLittleEndian;
-}
 
 export const isChrome = !!(userAgent && userAgent.indexOf('Chrome') >= 0);
 export const isFirefox = !!(userAgent && userAgent.indexOf('Firefox') >= 0);
 export const isSafari = !!(!isChrome && (userAgent && userAgent.indexOf('Safari') >= 0));
 export const isEdge = !!(userAgent && userAgent.indexOf('Edg/') >= 0);
 export const isAndroid = !!(userAgent && userAgent.indexOf('Android') >= 0);
-
-export function isBigSurOrNewer(osVersion: string): boolean {
-	return parseFloat(osVersion) >= 20;
-}

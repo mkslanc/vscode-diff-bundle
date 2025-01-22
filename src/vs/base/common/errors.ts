@@ -35,64 +35,19 @@ export class ErrorHandler {
 		};
 	}
 
-	addListener(listener: ErrorListenerCallback): ErrorListenerUnbind {
-		this.listeners.push(listener);
-
-		return () => {
-			this._removeListener(listener);
-		};
-	}
-
 	private emit(e: any): void {
 		this.listeners.forEach((listener) => {
 			listener(e);
 		});
 	}
 
-	private _removeListener(listener: ErrorListenerCallback): void {
-		this.listeners.splice(this.listeners.indexOf(listener), 1);
-	}
-
-	setUnexpectedErrorHandler(newUnexpectedErrorHandler: (e: any) => void): void {
-		this.unexpectedErrorHandler = newUnexpectedErrorHandler;
-	}
-
-	getUnexpectedErrorHandler(): (e: any) => void {
-		return this.unexpectedErrorHandler;
-	}
-
 	onUnexpectedError(e: any): void {
 		this.unexpectedErrorHandler(e);
 		this.emit(e);
 	}
-
-	// For external errors, we don't want the listeners to be called
-	onUnexpectedExternalError(e: any): void {
-		this.unexpectedErrorHandler(e);
-	}
 }
 
 export const errorHandler = new ErrorHandler();
-
-/** @skipMangle */
-export function setUnexpectedErrorHandler(newUnexpectedErrorHandler: (e: any) => void): void {
-	errorHandler.setUnexpectedErrorHandler(newUnexpectedErrorHandler);
-}
-
-/**
- * Returns if the error is a SIGPIPE error. SIGPIPE errors should generally be
- * logged at most once, to avoid a loop.
- *
- * @see https://github.com/microsoft/vscode-remote-release/issues/6481
- */
-export function isSigPipeError(e: unknown): e is Error {
-	if (!e || typeof e !== 'object') {
-		return false;
-	}
-
-	const cast = e as Record<string, string | undefined>;
-	return cast.code === 'EPIPE' && cast.syscall?.toUpperCase() === 'WRITE';
-}
 
 /**
  * This function should only be called with errors that indicate a bug in the product.
@@ -108,14 +63,6 @@ export function onUnexpectedError(e: any): undefined {
 	// ignore errors from cancelled promises
 	if (!isCancellationError(e)) {
 		errorHandler.onUnexpectedError(e);
-	}
-	return undefined;
-}
-
-export function onUnexpectedExternalError(e: any): undefined {
-	// ignore errors from cancelled promises
-	if (!isCancellationError(e)) {
-		errorHandler.onUnexpectedExternalError(e);
 	}
 	return undefined;
 }
@@ -213,51 +160,10 @@ export class CancellationError extends Error {
 	}
 }
 
-/**
- * @deprecated use {@link CancellationError `new CancellationError()`} instead
- */
-export function canceled(): Error {
-	const error = new Error(canceledName);
-	error.name = error.message;
-	return error;
-}
-
-export function illegalArgument(name?: string): Error {
-	if (name) {
-		return new Error(`Illegal argument: ${name}`);
-	} else {
-		return new Error('Illegal argument');
-	}
-}
-
-export function illegalState(name?: string): Error {
-	if (name) {
-		return new Error(`Illegal state: ${name}`);
-	} else {
-		return new Error('Illegal state');
-	}
-}
-
 export class ReadonlyError extends TypeError {
 	constructor(name?: string) {
 		super(name ? `${name} is read-only and cannot be changed` : 'Cannot change read-only property');
 	}
-}
-
-export function getErrorMessage(err: any): string {
-	if (!err) {
-		return 'Error';
-	}
-
-	if (err.message) {
-		return err.message;
-	}
-
-	if (err.stack) {
-		return err.stack.split('\n')[0];
-	}
-
-	return String(err);
 }
 
 export class NotImplementedError extends Error {

@@ -21,10 +21,6 @@ export class StringDiffSequence implements ISequence {
 	}
 }
 
-export function stringDiff(original: string, modified: string, pretty: boolean): IDiffChange[] {
-	return new LcsDiff(new StringDiffSequence(original), new StringDiffSequence(modified)).ComputeDiff(pretty).changes;
-}
-
 export interface ISequence {
 	getElements(): Int32Array | number[] | string[];
 	getStrictElement?(index: number): string;

@@ -52,8 +52,4 @@ export class MovedText {
 		this.lineRangeMapping = lineRangeMapping;
 		this.changes = changes;
 	}
-
-	public flip(): MovedText {
-		return new MovedText(this.lineRangeMapping.flip(), this.changes.map(c => c.flip()));
-	}
 }

@@ -14,20 +14,7 @@ export class ObservableLazy<T> {
 	 */
 	public get cachedValue(): IObservable<T | undefined> { return this._value; }
 
-	constructor(private readonly _computeValue: () => T) {
-	}
-
-	/**
-	 * Returns the cached value.
-	 * Computes the value if the value has not been cached yet.
-	 */
-	public getValue() {
-		let v = this._value.get();
-		if (!v) {
-			v = this._computeValue();
-			this._value.set(v, undefined);
-		}
-		return v;
+	constructor() {
 	}
 }
 
@@ -35,9 +22,6 @@ export class ObservableLazy<T> {
  * A promise whose state is observable.
  */
 export class ObservablePromise<T> {
-	public static fromFn<T>(fn: () => Promise<T>): ObservablePromise<T> {
-		return new ObservablePromise(fn());
-	}
 
 	private readonly _value = observableValue<PromiseResult<T> | undefined>(this, undefined);
 
@@ -84,16 +68,6 @@ export class PromiseResult<T> {
 		public readonly error: unknown | undefined,
 	) {
 	}
-
-	/**
-	 * Returns the value if the promise resolved, otherwise throws the error.
-	 */
-	public getDataOrThrow(): T {
-		if (this.error) {
-			throw this.error;
-		}
-		return this.data!;
-	}
 }
 
 /**
@@ -109,9 +83,5 @@ export class ObservableLazyPromise<T> {
 	public readonly cachedPromiseResult = derived(this, reader => this._lazyValue.cachedValue.read(reader)?.promiseResult.read(reader));
 
 	constructor(private readonly _computePromise: () => Promise<T>) {
-	}
-
-	public getPromise(): Promise<T> {
-		return this._lazyValue.getValue().promise;
 	}
 }

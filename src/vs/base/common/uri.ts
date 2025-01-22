@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CharCode } from './charCode.js';
 import { MarshalledId } from './marshallingIds.js';
 import * as paths from './path.js';
 import { isWindows } from './platform.js';
@@ -425,17 +424,6 @@ export interface UriComponents {
 	path?: string;
 	query?: string;
 	fragment?: string;
-}
-
-export function isUriComponents(thing: any): thing is UriComponents {
-	if (!thing || typeof thing !== 'object') {
-		return false;
-	}
-	return typeof (<UriComponents>thing).scheme === 'string'
-		&& (typeof (<UriComponents>thing).authority === 'string' || typeof (<UriComponents>thing).authority === 'undefined')
-		&& (typeof (<UriComponents>thing).path === 'string' || typeof (<UriComponents>thing).path === 'undefined')
-		&& (typeof (<UriComponents>thing).query === 'string' || typeof (<UriComponents>thing).query === 'undefined')
-		&& (typeof (<UriComponents>thing).fragment === 'string' || typeof (<UriComponents>thing).fragment === 'undefined');
 }
 
 interface UriState extends UriComponents {

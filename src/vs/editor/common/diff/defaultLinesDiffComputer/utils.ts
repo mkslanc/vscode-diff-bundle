@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CharCode } from '../../../../base/common/charCode.js';
 import { LineRange } from '../../core/lineRange.js';
 import { DetailedLineRangeMapping } from '../rangeMapping.js';
 

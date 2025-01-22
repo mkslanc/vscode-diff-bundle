@@ -28,10 +28,6 @@ export class LinkedList<E> {
 		return this._size;
 	}
 
-	isEmpty(): boolean {
-		return this._first === Node.Undefined;
-	}
-
 	clear(): void {
 		let node = this._first;
 		while (node !== Node.Undefined) {
@@ -44,10 +40,6 @@ export class LinkedList<E> {
 		this._first = Node.Undefined;
 		this._last = Node.Undefined;
 		this._size = 0;
-	}
-
-	unshift(element: E): () => void {
-		return this._insert(element, false);
 	}
 
 	push(element: E): () => void {
@@ -95,16 +87,6 @@ export class LinkedList<E> {
 		}
 	}
 
-	pop(): E | undefined {
-		if (this._last === Node.Undefined) {
-			return undefined;
-		} else {
-			const res = this._last.element;
-			this._remove(this._last);
-			return res;
-		}
-	}
-
 	private _remove(node: Node<E>): void {
 		if (node.prev !== Node.Undefined && node.next !== Node.Undefined) {
 			// middle
@@ -130,13 +112,5 @@ export class LinkedList<E> {
 
 		// done
 		this._size -= 1;
-	}
-
-	*[Symbol.iterator](): Iterator<E> {
-		let node = this._first;
-		while (node !== Node.Undefined) {
-			yield node.element;
-			node = node.next;
-		}
 	}
 }

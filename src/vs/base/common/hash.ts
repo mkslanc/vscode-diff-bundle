@@ -6,17 +6,6 @@
 import { VSBuffer } from './buffer.js';
 import * as strings from './strings.js';
 
-type NotSyncHashable = ArrayBufferLike | ArrayBufferView;
-
-/**
- * Return a hash value for an object.
- *
- * Note that this should not be used for binary data types. Instead,
- * prefer {@link hashAsync}.
- */
-export function hash<T>(obj: T extends NotSyncHashable ? never : T): number {
-	return doHash(obj, 0);
-}
 
 export function doHash(obj: any, hashVal: number): number {
 	switch (typeof obj) {

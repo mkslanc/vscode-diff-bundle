@@ -73,10 +73,6 @@ export class SequenceDiff {
 		return new SequenceDiff(this.seq2Range, this.seq1Range);
 	}
 
-	public toString(): string {
-		return `${this.seq1Range} <-> ${this.seq2Range}`;
-	}
-
 	public join(other: SequenceDiff): SequenceDiff {
 		return new SequenceDiff(this.seq1Range.join(other.seq1Range), this.seq2Range.join(other.seq2Range));
 	}
@@ -100,10 +96,6 @@ export class SequenceDiff {
 			return this;
 		}
 		return new SequenceDiff(this.seq1Range.deltaEnd(offset), this.seq2Range.deltaEnd(offset));
-	}
-
-	public intersectsOrTouches(other: SequenceDiff): boolean {
-		return this.seq1Range.intersectsOrTouches(other.seq1Range) || this.seq2Range.intersectsOrTouches(other.seq2Range);
 	}
 
 	public intersect(other: SequenceDiff): SequenceDiff | undefined {
@@ -132,10 +124,6 @@ export class OffsetPair {
 		public readonly offset1: number,
 		public readonly offset2: number,
 	) {
-	}
-
-	public toString(): string {
-		return `${this.offset1} <-> ${this.offset2}`;
 	}
 
 	public delta(offset: number): OffsetPair {

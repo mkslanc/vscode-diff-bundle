@@ -5,34 +5,6 @@
 
 import { URI } from './uri.js';
 
-export function getOrSet<K, V>(map: Map<K, V>, key: K, value: V): V {
-	let result = map.get(key);
-	if (result === undefined) {
-		result = value;
-		map.set(key, result);
-	}
-
-	return result;
-}
-
-export function mapToString<K, V>(map: Map<K, V>): string {
-	const entries: string[] = [];
-	map.forEach((value, key) => {
-		entries.push(`${key} => ${value}`);
-	});
-
-	return `Map(${map.size}) {${entries.join(', ')}}`;
-}
-
-export function setToString<K>(set: Set<K>): string {
-	const entries: K[] = [];
-	set.forEach(value => {
-		entries.push(value);
-	});
-
-	return `Set(${set.size}) {${entries.join(', ')}}`;
-}
-
 interface ResourceMapKeyFn {
 	(resource: URI): string;
 }
@@ -714,34 +686,6 @@ export class MRUCache<K, V> extends Cache<K, V> {
 
 export class CounterSet<T> {
 
-	private map = new Map<T, number>();
-
-	add(value: T): CounterSet<T> {
-		this.map.set(value, (this.map.get(value) || 0) + 1);
-		return this;
-	}
-
-	delete(value: T): boolean {
-		let counter = this.map.get(value) || 0;
-
-		if (counter === 0) {
-			return false;
-		}
-
-		counter--;
-
-		if (counter === 0) {
-			this.map.delete(value);
-		} else {
-			this.map.set(value, counter);
-		}
-
-		return true;
-	}
-
-	has(value: T): boolean {
-		return this.map.has(value);
-	}
 }
 
 /**
@@ -761,46 +705,9 @@ export class BidirectionalMap<K, V> {
 		}
 	}
 
-	clear(): void {
-		this._m1.clear();
-		this._m2.clear();
-	}
-
 	set(key: K, value: V): void {
 		this._m1.set(key, value);
 		this._m2.set(value, key);
-	}
-
-	get(key: K): V | undefined {
-		return this._m1.get(key);
-	}
-
-	getKey(value: V): K | undefined {
-		return this._m2.get(value);
-	}
-
-	delete(key: K): boolean {
-		const value = this._m1.get(key);
-		if (value === undefined) {
-			return false;
-		}
-		this._m1.delete(key);
-		this._m2.delete(value);
-		return true;
-	}
-
-	forEach(callbackfn: (value: V, key: K, map: BidirectionalMap<K, V>) => void, thisArg?: any): void {
-		this._m1.forEach((value, key) => {
-			callbackfn.call(thisArg, value, key, this);
-		});
-	}
-
-	keys(): IterableIterator<K> {
-		return this._m1.keys();
-	}
-
-	values(): IterableIterator<V> {
-		return this._m1.values();
 	}
 }
 
@@ -817,20 +724,6 @@ export class SetMap<K, V> {
 		}
 
 		values.add(value);
-	}
-
-	delete(key: K, value: V): void {
-		const values = this.map.get(key);
-
-		if (!values) {
-			return;
-		}
-
-		values.delete(value);
-
-		if (values.size === 0) {
-			this.map.delete(key);
-		}
 	}
 
 	forEach(key: K, fn: (value: V) => void): void {
@@ -852,30 +745,6 @@ export class SetMap<K, V> {
 	}
 }
 
-export function mapsStrictEqualIgnoreOrder(a: Map<unknown, unknown>, b: Map<unknown, unknown>): boolean {
-	if (a === b) {
-		return true;
-	}
-
-	if (a.size !== b.size) {
-		return false;
-	}
-
-	for (const [key, value] of a) {
-		if (!b.has(key) || b.get(key) !== value) {
-			return false;
-		}
-	}
-
-	for (const [key] of b) {
-		if (!a.has(key)) {
-			return false;
-		}
-	}
-
-	return true;
-}
-
 /**
  * A map that is addressable with an arbitrary number of keys. This is useful in high performance
  * scenarios where creating a composite key whenever the data is accessed is too expensive. For
@@ -883,70 +752,4 @@ export function mapsStrictEqualIgnoreOrder(a: Map<unknown, unknown>, b: Map<unkn
  * will cause a significant hit to performance.
  */
 export class NKeyMap<TValue, TKeys extends (string | boolean | number)[]> {
-	private _data: Map<any, any> = new Map();
-
-	/**
-	 * Sets a value on the map. Note that unlike a standard `Map`, the first argument is the value.
-	 * This is because the spread operator is used for the keys and must be last..
-	 * @param value The value to set.
-	 * @param keys The keys for the value.
-	 */
-	public set(value: TValue, ...keys: [...TKeys]): void {
-		let currentMap = this._data;
-		for (let i = 0; i < keys.length - 1; i++) {
-			if (!currentMap.has(keys[i])) {
-				currentMap.set(keys[i], new Map());
-			}
-			currentMap = currentMap.get(keys[i]);
-		}
-		currentMap.set(keys[keys.length - 1], value);
-	}
-
-	public get(...keys: [...TKeys]): TValue | undefined {
-		let currentMap = this._data;
-		for (let i = 0; i < keys.length - 1; i++) {
-			if (!currentMap.has(keys[i])) {
-				return undefined;
-			}
-			currentMap = currentMap.get(keys[i]);
-		}
-		return currentMap.get(keys[keys.length - 1]);
-	}
-
-	public clear(): void {
-		this._data.clear();
-	}
-
-	public *values(): IterableIterator<TValue> {
-		function* iterate(map: Map<any, any>): IterableIterator<TValue> {
-			for (const value of map.values()) {
-				if (value instanceof Map) {
-					yield* iterate(value);
-				} else {
-					yield value;
-				}
-			}
-		}
-		yield* iterate(this._data);
-	}
-
-	/**
-	 * Get a textual representation of the map for debugging purposes.
-	 */
-	public toString(): string {
-		const printMap = (map: Map<any, any>, depth: number): string => {
-			let result = '';
-			for (const [key, value] of map) {
-				result += `${'  '.repeat(depth)}${key}: `;
-				if (value instanceof Map) {
-					result += '\n' + printMap(value, depth + 1);
-				} else {
-					result += `${value}\n`;
-				}
-			}
-			return result;
-		};
-
-		return printMap(this._data, 0);
-	}
 }

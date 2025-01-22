@@ -5,7 +5,7 @@
 
 import { BaseObservable, IChangeContext, IObservable, IObservableWithChange, IObserver, IReader, ISettableObservable, ITransaction, _setDerivedOpts, } from './base.js';
 import { DebugNameData, DebugOwner, IDebugNameData } from './debugName.js';
-import { BugIndicatingError, DisposableStore, EqualityComparer, IDisposable, assertFn, onBugIndicatingError, strictEquals } from './commonFacade/deps.js';
+import { BugIndicatingError, EqualityComparer, assertFn, onBugIndicatingError, strictEquals } from './commonFacade/deps.js';
 import { getLogger } from './logging.js';
 
 /**
@@ -37,18 +37,6 @@ export function derived<T>(computeFnOrOwner: ((reader: IReader) => T) | DebugOwn
 	);
 }
 
-export function derivedWithSetter<T>(owner: DebugOwner | undefined, computeFn: (reader: IReader) => T, setter: (value: T, transaction: ITransaction | undefined) => void): ISettableObservable<T> {
-	return new DerivedWithSetter(
-		new DebugNameData(owner, undefined, computeFn),
-		computeFn,
-		undefined,
-		undefined,
-		undefined,
-		strictEquals,
-		setter,
-	);
-}
-
 export function derivedOpts<T>(
 	options: IDebugNameData & {
 		equalsFn?: EqualityComparer<T>;
@@ -67,102 +55,6 @@ export function derivedOpts<T>(
 }
 
 _setDerivedOpts(derivedOpts);
-
-/**
- * Represents an observable that is derived from other observables.
- * The value is only recomputed when absolutely needed.
- *
- * {@link computeFn} should start with a JS Doc using `@description` to name the derived.
- *
- * Use `createEmptyChangeSummary` to create a "change summary" that can collect the changes.
- * Use `handleChange` to add a reported change to the change summary.
- * The compute function is given the last change summary.
- * The change summary is discarded after the compute function was called.
- *
- * @see derived
- */
-export function derivedHandleChanges<T, TChangeSummary>(
-	options: IDebugNameData & {
-		createEmptyChangeSummary: () => TChangeSummary;
-		handleChange: (context: IChangeContext, changeSummary: TChangeSummary) => boolean;
-		equalityComparer?: EqualityComparer<T>;
-	},
-	computeFn: (reader: IReader, changeSummary: TChangeSummary) => T
-): IObservable<T> {
-	return new Derived(
-		new DebugNameData(options.owner, options.debugName, undefined),
-		computeFn,
-		options.createEmptyChangeSummary,
-		options.handleChange,
-		undefined,
-		options.equalityComparer ?? strictEquals
-	);
-}
-
-export function derivedWithStore<T>(computeFn: (reader: IReader, store: DisposableStore) => T): IObservable<T>;
-export function derivedWithStore<T>(owner: object, computeFn: (reader: IReader, store: DisposableStore) => T): IObservable<T>;
-export function derivedWithStore<T>(computeFnOrOwner: ((reader: IReader, store: DisposableStore) => T) | object, computeFnOrUndefined?: ((reader: IReader, store: DisposableStore) => T)): IObservable<T> {
-	let computeFn: (reader: IReader, store: DisposableStore) => T;
-	let owner: DebugOwner;
-	if (computeFnOrUndefined === undefined) {
-		computeFn = computeFnOrOwner as any;
-		owner = undefined;
-	} else {
-		owner = computeFnOrOwner;
-		computeFn = computeFnOrUndefined as any;
-	}
-
-	const store = new DisposableStore();
-	return new Derived(
-		new DebugNameData(owner, undefined, computeFn),
-		r => {
-			store.clear();
-			return computeFn(r, store);
-		}, undefined,
-		undefined,
-		() => store.dispose(),
-		strictEquals
-	);
-}
-
-export function derivedDisposable<T extends IDisposable | undefined>(computeFn: (reader: IReader) => T): IObservable<T>;
-export function derivedDisposable<T extends IDisposable | undefined>(owner: DebugOwner, computeFn: (reader: IReader) => T): IObservable<T>;
-export function derivedDisposable<T extends IDisposable | undefined>(computeFnOrOwner: ((reader: IReader) => T) | DebugOwner, computeFnOrUndefined?: ((reader: IReader) => T)): IObservable<T> {
-	let computeFn: (reader: IReader) => T;
-	let owner: DebugOwner;
-	if (computeFnOrUndefined === undefined) {
-		computeFn = computeFnOrOwner as any;
-		owner = undefined;
-	} else {
-		owner = computeFnOrOwner;
-		computeFn = computeFnOrUndefined as any;
-	}
-
-	let store: DisposableStore | undefined = undefined;
-	return new Derived(
-		new DebugNameData(owner, undefined, computeFn),
-		r => {
-			if (!store) {
-				store = new DisposableStore();
-			} else {
-				store.clear();
-			}
-			const result = computeFn(r);
-			if (result) {
-				store.add(result);
-			}
-			return result;
-		}, undefined,
-		undefined,
-		() => {
-			if (store) {
-				store.dispose();
-				store = undefined;
-			}
-		},
-		strictEquals
-	);
-}
 
 const enum DerivedState {
 	/** Initial state, no previous value, recomputation needed */
