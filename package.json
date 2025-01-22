@@ -1,6 +1,6 @@
 {
   "name": "vscode-diff-bundle",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Bundle for diff utility used in the Visual Studio Code source.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,5 +16,9 @@
     "test": "npx nyc node test.js && npx nyc report --reporter=html",
     "check": "tsc"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md"
+  ]
 }
