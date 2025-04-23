@@ -275,6 +275,14 @@ function setParentOfDisposable(child: IDisposable, parent: IDisposable | null): 
 }
 
 
+/**
+ * Indicates that the given object is a singleton which does not need to be disposed.
+*/
+export function markAsSingleton<T extends IDisposable>(singleton: T): T {
+	disposableTracker?.markAsSingleton(singleton);
+	return singleton;
+}
+
 // #endregion
 
 /**
@@ -288,6 +296,13 @@ function setParentOfDisposable(child: IDisposable, parent: IDisposable | null): 
  */
 export interface IDisposable {
 	dispose(): void;
+}
+
+/**
+ * Check if `thing` is {@link IDisposable disposable}.
+ */
+export function isDisposable<E extends any>(thing: E): thing is E & IDisposable {
+	return typeof thing === 'object' && thing !== null && typeof (<IDisposable><any>thing).dispose === 'function' && (<IDisposable><any>thing).dispose.length === 0;
 }
 
 /**

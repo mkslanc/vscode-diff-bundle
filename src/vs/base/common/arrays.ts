@@ -112,12 +112,59 @@ export function forEachWithNeighbors<T>(arr: T[], f: (before: T | undefined, ele
 	}
 }
 
+/**
+ * Removes duplicates from the given array. The optional keyFn allows to specify
+ * how elements are checked for equality by returning an alternate value for each.
+ */
+export function distinct<T>(array: ReadonlyArray<T>, keyFn: (value: T) => unknown = value => value): T[] {
+	const seen = new Set<any>();
+
+	return array.filter(element => {
+		const key = keyFn!(element);
+		if (seen.has(key)) {
+			return false;
+		}
+		seen.add(key);
+		return true;
+	});
+}
+
 export function pushMany<T>(arr: T[], items: ReadonlyArray<T>): void {
 	for (const item of items) {
 		arr.push(item);
 	}
 }
 
+
+/**
+ * Utility that helps to pick a property from an object.
+ *
+ * ## Examples
+ *
+ * ```typescript
+ * interface IObject = {
+ *   a: number,
+ *   b: string,
+ * };
+ *
+ * const list: IObject[] = [
+ *   { a: 1, b: 'foo' },
+ *   { a: 2, b: 'bar' },
+ * ];
+ *
+ * assert.deepStrictEqual(
+ *   list.map(pick('a')),
+ *   [1, 2],
+ * );
+ * ```
+ */
+export const pick = <TObject, TKeyName extends keyof TObject>(
+	key: TKeyName,
+) => {
+	return (obj: TObject): TObject[TKeyName] => {
+		return obj[key];
+	};
+};
 
 /**
  * When comparing two values,
@@ -152,13 +199,17 @@ export function reverseOrder<TItem>(comparator: Comparator<TItem>): Comparator<T
 }
 
 export class ArrayQueue<T> {
+	private readonly items: readonly T[];
 	private firstIdx = 0;
-	private lastIdx = this.items.length - 1;
+	private lastIdx: number;
 
 	/**
 	 * Constructs a queue that is backed by the given array. Runtime is O(1).
 	*/
-	constructor(private readonly items: readonly T[]) { }
+	constructor(items: readonly T[]) {
+		this.items = items;
+		this.lastIdx = this.items.length - 1;
+	}
 
 	get length(): number {
 		return this.lastIdx - this.firstIdx + 1;

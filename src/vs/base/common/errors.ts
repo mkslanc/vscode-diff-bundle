@@ -160,6 +160,22 @@ export class CancellationError extends Error {
 	}
 }
 
+export function illegalArgument(name?: string): Error {
+	if (name) {
+		return new Error(`Illegal argument: ${name}`);
+	} else {
+		return new Error('Illegal argument');
+	}
+}
+
+export function illegalState(name?: string): Error {
+	if (name) {
+		return new Error(`Illegal state: ${name}`);
+	} else {
+		return new Error('Illegal state');
+	}
+}
+
 export class ReadonlyError extends TypeError {
 	constructor(name?: string) {
 		super(name ? `${name} is read-only and cannot be changed` : 'Cannot change read-only property');

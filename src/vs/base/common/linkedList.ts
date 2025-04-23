@@ -28,6 +28,10 @@ export class LinkedList<E> {
 		return this._size;
 	}
 
+	isEmpty(): boolean {
+		return this._first === Node.Undefined;
+	}
+
 	clear(): void {
 		let node = this._first;
 		while (node !== Node.Undefined) {
@@ -40,6 +44,10 @@ export class LinkedList<E> {
 		this._first = Node.Undefined;
 		this._last = Node.Undefined;
 		this._size = 0;
+	}
+
+	unshift(element: E): () => void {
+		return this._insert(element, false);
 	}
 
 	push(element: E): () => void {

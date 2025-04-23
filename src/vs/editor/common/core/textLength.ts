@@ -17,7 +17,7 @@ export class TextLength {
 	) { }
 
 	public toLineRange(): LineRange {
-		return LineRange.ofLength(1, this.lineCount);
+		return LineRange.ofLength(1, this.lineCount + 1);
 	}
 
 	public addToPosition(position: Position): Position {
