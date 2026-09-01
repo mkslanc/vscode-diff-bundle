@@ -6,10 +6,10 @@ interface ILinesDiffComputerOptions {
 }
 
 declare function computeDiff(originalLines: string[], modifiedLines: string[], options: ILinesDiffComputerOptions): {
-    origStart: any;
-    origEnd: any;
-    editStart: any;
-    editEnd: any;
+    origStart: number;
+    origEnd: number;
+    editStart: number;
+    editEnd: number;
     charChanges: {
         originalStartLineNumber: number;
         originalStartColumn: number;
@@ -20,6 +20,7 @@ declare function computeDiff(originalLines: string[], modifiedLines: string[], o
         modifiedEndLineNumber: number;
         modifiedEndColumn: number;
     }[];
+    inlinePending: boolean;
 }[];
 
 export { computeDiff };
