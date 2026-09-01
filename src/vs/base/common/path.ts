@@ -4,11 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 // NOTE: VSCode's copy of nodejs path library to be usable in common (non-node) namespace
-// Copied from: https://github.com/nodejs/node/commits/v20.18.2/lib/path.js
+// Copied from: https://github.com/nodejs/node/commits/v20.9.0/lib/path.js
 // Excluding: the change that adds primordials
 // (https://github.com/nodejs/node/commit/187a862d221dec42fa9a5c4214e7034d9092792f and others)
-// Excluding: the change that adds glob matching
-// (https://github.com/nodejs/node/commit/57b8b8e18e5e2007114c63b71bf0baedc01936a6)
 
 /**
  * Copyright Joyent, Inc. and other Node contributors.
@@ -427,23 +425,6 @@ export const win32: IPath = {
 		if (tail.length > 0 && isPathSeparator(path.charCodeAt(len - 1))) {
 			tail += '\\';
 		}
-		if (!isAbsolute && device === undefined && path.includes(':')) {
-			// If the original path was not absolute and if we have not been able to
-			// resolve it relative to a particular device, we need to ensure that the
-			// `tail` has not become something that Windows might interpret as an
-			// absolute path. See CVE-2024-36139.
-			if (tail.length >= 2 &&
-				isWindowsDeviceRoot(tail.charCodeAt(0)) &&
-				tail.charCodeAt(1) === CHAR_COLON) {
-				return `.\\${tail}`;
-			}
-			let index = path.indexOf(':');
-			do {
-				if (index === len - 1 || isPathSeparator(path.charCodeAt(index + 1))) {
-					return `.\\${tail}`;
-				}
-			} while ((index = path.indexOf(':', index + 1)) !== -1);
-		}
 		if (device === undefined) {
 			return isAbsolute ? `\\${tail}` : tail;
 		}
@@ -561,42 +542,6 @@ export const win32: IPath = {
 
 		if (from === to) {
 			return '';
-		}
-
-		if (fromOrig.length !== from.length || toOrig.length !== to.length) {
-			const fromSplit = fromOrig.split('\\');
-			const toSplit = toOrig.split('\\');
-			if (fromSplit[fromSplit.length - 1] === '') {
-				fromSplit.pop();
-			}
-			if (toSplit[toSplit.length - 1] === '') {
-				toSplit.pop();
-			}
-
-			const fromLen = fromSplit.length;
-			const toLen = toSplit.length;
-			const length = fromLen < toLen ? fromLen : toLen;
-
-			let i;
-			for (i = 0; i < length; i++) {
-				if (fromSplit[i].toLowerCase() !== toSplit[i].toLowerCase()) {
-					break;
-				}
-			}
-
-			if (i === 0) {
-				return toOrig;
-			} else if (i === length) {
-				if (toLen > length) {
-					return toSplit.slice(i).join('\\');
-				}
-				if (fromLen > length) {
-					return '..\\'.repeat(fromLen - 1 - i) + '..';
-				}
-				return '';
-			}
-
-			return '..\\'.repeat(fromLen - i) + toSplit.slice(i).join('\\');
 		}
 
 		// Trim any leading backslashes
@@ -727,7 +672,7 @@ export const win32: IPath = {
 			return `\\\\?\\${resolvedPath}`;
 		}
 
-		return resolvedPath;
+		return path;
 	},
 
 	dirname(path: string): string {
@@ -1153,8 +1098,9 @@ export const posix: IPath = {
 		let resolvedPath = '';
 		let resolvedAbsolute = false;
 
-		for (let i = pathSegments.length - 1; i >= 0 && !resolvedAbsolute; i--) {
-			const path = pathSegments[i];
+		for (let i = pathSegments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
+			const path = i >= 0 ? pathSegments[i] : posixCwd();
+
 			validateString(path, `paths[${i}]`);
 
 			// Skip empty entries
@@ -1164,13 +1110,6 @@ export const posix: IPath = {
 
 			resolvedPath = `${path}/${resolvedPath}`;
 			resolvedAbsolute = path.charCodeAt(0) === CHAR_FORWARD_SLASH;
-		}
-
-		if (!resolvedAbsolute) {
-			const cwd = posixCwd();
-			resolvedPath = `${cwd}/${resolvedPath}`;
-			resolvedAbsolute =
-				cwd.charCodeAt(0) === CHAR_FORWARD_SLASH;
 		}
 
 		// At this point the path should be resolved to a full absolute path, but
@@ -1222,21 +1161,22 @@ export const posix: IPath = {
 		if (paths.length === 0) {
 			return '.';
 		}
-
-		const path = [];
+		let joined;
 		for (let i = 0; i < paths.length; ++i) {
 			const arg = paths[i];
 			validateString(arg, 'path');
 			if (arg.length > 0) {
-				path.push(arg);
+				if (joined === undefined) {
+					joined = arg;
+				} else {
+					joined += `/${arg}`;
+				}
 			}
 		}
-
-		if (path.length === 0) {
+		if (joined === undefined) {
 			return '.';
 		}
-
-		return posix.normalize(path.join('/'));
+		return posix.normalize(joined);
 	},
 
 	relative(from: string, to: string): string {
@@ -1348,7 +1288,7 @@ export const posix: IPath = {
 
 	basename(path: string, suffix?: string): string {
 		if (suffix !== undefined) {
-			validateString(suffix, 'suffix');
+			validateString(suffix, 'ext');
 		}
 		validateString(path, 'path');
 
@@ -1436,8 +1376,8 @@ export const posix: IPath = {
 		// after any path separator we find
 		let preDotState = 0;
 		for (let i = path.length - 1; i >= 0; --i) {
-			const char = path[i];
-			if (char === '/') {
+			const code = path.charCodeAt(i);
+			if (code === CHAR_FORWARD_SLASH) {
 				// If we reached a path separator that was not part of a set of path
 				// separators at the end of the string, stop now
 				if (!matchedSlash) {
@@ -1452,7 +1392,7 @@ export const posix: IPath = {
 				matchedSlash = false;
 				end = i + 1;
 			}
-			if (char === '.') {
+			if (code === CHAR_DOT) {
 				// If this is our first dot, mark it as the start of our extension
 				if (startDot === -1) {
 					startDot = i;

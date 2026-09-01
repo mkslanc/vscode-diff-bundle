@@ -1133,7 +1133,3 @@ export class LcsDiff {
 		}
 	}
 }
-
-
-
-

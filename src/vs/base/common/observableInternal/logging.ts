@@ -3,21 +3,55 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AutorunObserver } from '../autorun.js';
-import { IObservable, TransactionImpl } from '../base.js';
-import { Derived } from '../derived.js';
-import { IObservableLogger, IChangeInformation, addLogger } from './logging.js';
-import { FromEventObservable } from '../utils.js';
-import { getClassName } from '../debugName.js';
+import { AutorunObserver } from './autorun.js';
+import { IObservable, TransactionImpl } from './base.js';
+import { Derived } from './derived.js';
+import { FromEventObservable } from './utils.js';
 
-let consoleObservableLogger: ConsoleObservableLogger | undefined;
+let globalObservableLogger: IObservableLogger | undefined;
 
-export function logObservableToConsole(obs: IObservable<any>): void {
-	if (!consoleObservableLogger) {
-		consoleObservableLogger = new ConsoleObservableLogger();
-		addLogger(consoleObservableLogger);
+export function setLogger(logger: IObservableLogger): void {
+	globalObservableLogger = logger;
+}
+
+export function getLogger(): IObservableLogger | undefined {
+	return globalObservableLogger;
+}
+
+export function logObservable(obs: IObservable<any>): void {
+	if (!globalObservableLogger) {
+		const l = new ConsoleObservableLogger();
+		l.addFilteredObj(obs);
+		setLogger(l);
+	} else {
+		if (globalObservableLogger instanceof ConsoleObservableLogger) {
+			(globalObservableLogger as ConsoleObservableLogger).addFilteredObj(obs);
+		}
 	}
-	consoleObservableLogger.addFilteredObj(obs);
+}
+
+interface IChangeInformation {
+	oldValue: unknown;
+	newValue: unknown;
+	change: unknown;
+	didChange: boolean;
+	hadValue: boolean;
+}
+
+export interface IObservableLogger {
+	handleObservableChanged(observable: IObservable<any>, info: IChangeInformation): void;
+	handleFromEventObservableTriggered(observable: FromEventObservable<any, any>, info: IChangeInformation): void;
+
+	handleAutorunCreated(autorun: AutorunObserver): void;
+	handleAutorunTriggered(autorun: AutorunObserver): void;
+	handleAutorunFinished(autorun: AutorunObserver): void;
+
+	handleDerivedCreated(observable: Derived<any>): void;
+	handleDerivedRecomputed(observable: Derived<any>, info: IChangeInformation): void;
+	handleDerivedCleared(observable: Derived<any>): void;
+
+	handleBeginTransaction(transaction: TransactionImpl): void;
+	handleEndTransaction(): void;
 }
 
 export class ConsoleObservableLogger implements IObservableLogger {
@@ -68,45 +102,8 @@ export class ConsoleObservableLogger implements IObservableLogger {
 			: [normalText(` (unchanged)`)];
 	}
 
-	handleObservableCreated(observable: IObservable<any>): void {
-		if (observable instanceof Derived) {
-			const derived = observable;
-			this.changedObservablesSets.set(derived, new Set());
-
-			const debugTrackUpdating = false;
-			if (debugTrackUpdating) {
-				const updating: IObservable<any>[] = [];
-				(derived as any).__debugUpdating = updating;
-
-				const existingBeginUpdate = derived.beginUpdate;
-				derived.beginUpdate = (obs) => {
-					updating.push(obs);
-					return existingBeginUpdate.apply(derived, [obs]);
-				};
-
-				const existingEndUpdate = derived.endUpdate;
-				derived.endUpdate = (obs) => {
-					const idx = updating.indexOf(obs);
-					if (idx === -1) {
-						console.error('endUpdate called without beginUpdate', derived.debugName, obs.debugName);
-					}
-					updating.splice(idx, 1);
-					return existingEndUpdate.apply(derived, [obs]);
-				};
-			}
-		}
-	}
-
-	handleOnListenerCountChanged(observable: IObservable<any>, newCount: number): void {
-	}
-
-	handleObservableUpdated(observable: IObservable<unknown>, info: IChangeInformation): void {
+	handleObservableChanged(observable: IObservable<unknown>, info: IChangeInformation): void {
 		if (!this._isIncluded(observable)) { return; }
-		if (observable instanceof Derived) {
-			this._handleDerivedRecomputed(observable, info);
-			return;
-		}
-
 		console.log(...this.textToConsoleArgs([
 			formatKind('observable value changed'),
 			styled(observable.debugName, { color: 'BlueViolet' }),
@@ -128,13 +125,38 @@ export class ConsoleObservableLogger implements IObservableLogger {
 		);
 	}
 
-	handleDerivedDependencyChanged(derived: Derived<any>, observable: IObservable<any>, change: unknown): void {
-		if (!this._isIncluded(derived)) { return; }
+	handleDerivedCreated(derived: Derived<unknown>): void {
+		const existingHandleChange = derived.handleChange;
+		this.changedObservablesSets.set(derived, new Set());
+		derived.handleChange = (observable, change) => {
+			this.changedObservablesSets.get(derived)!.add(observable);
+			return existingHandleChange.apply(derived, [observable, change]);
+		};
 
-		this.changedObservablesSets.get(derived)?.add(observable);
+		const debugTrackUpdating = false;
+		if (debugTrackUpdating) {
+			const updating: IObservable<any>[] = [];
+			(derived as any).__debugUpdating = updating;
+
+			const existingBeginUpdate = derived.beginUpdate;
+			derived.beginUpdate = (obs) => {
+				updating.push(obs);
+				return existingBeginUpdate.apply(derived, [obs]);
+			};
+
+			const existingEndUpdate = derived.endUpdate;
+			derived.endUpdate = (obs) => {
+				const idx = updating.indexOf(obs);
+				if (idx === -1) {
+					console.error('endUpdate called without beginUpdate', derived.debugName, obs.debugName);
+				}
+				updating.splice(idx, 1);
+				return existingEndUpdate.apply(derived, [obs]);
+			};
+		}
 	}
 
-	_handleDerivedRecomputed(derived: Derived<unknown>, info: IChangeInformation): void {
+	handleDerivedRecomputed(derived: Derived<unknown>, info: IChangeInformation): void {
 		if (!this._isIncluded(derived)) { return; }
 
 		const changedObservables = this.changedObservablesSets.get(derived);
@@ -172,19 +194,15 @@ export class ConsoleObservableLogger implements IObservableLogger {
 	handleAutorunCreated(autorun: AutorunObserver): void {
 		if (!this._isIncluded(autorun)) { return; }
 
+		const existingHandleChange = autorun.handleChange;
 		this.changedObservablesSets.set(autorun, new Set());
+		autorun.handleChange = (observable, change) => {
+			this.changedObservablesSets.get(autorun)!.add(observable);
+			return existingHandleChange.apply(autorun, [observable, change]);
+		};
 	}
 
-	handleAutorunDisposed(autorun: AutorunObserver): void {
-	}
-
-	handleAutorunDependencyChanged(autorun: AutorunObserver, observable: IObservable<any>, change: unknown): void {
-		if (!this._isIncluded(autorun)) { return; }
-
-		this.changedObservablesSets.get(autorun)!.add(observable);
-	}
-
-	handleAutorunStarted(autorun: AutorunObserver): void {
+	handleAutorunTriggered(autorun: AutorunObserver): void {
 		const changedObservables = this.changedObservablesSets.get(autorun);
 		if (!changedObservables) { return; }
 
@@ -223,9 +241,12 @@ export class ConsoleObservableLogger implements IObservableLogger {
 		this.indentation--;
 	}
 }
-type ConsoleText = (ConsoleText | undefined)[] |
-{ text: string; style: string; data?: unknown[] } |
-{ data: unknown[] };
+
+type ConsoleText =
+	| (ConsoleText | undefined)[]
+	| { text: string; style: string; data?: unknown[] }
+	| { data: unknown[] };
+
 function consoleTextToArgs(text: ConsoleText): unknown[] {
 	const styles = new Array<any>();
 	const data: unknown[] = [];
@@ -255,12 +276,15 @@ function consoleTextToArgs(text: ConsoleText): unknown[] {
 	result.push(...data);
 	return result;
 }
+
 function normalText(text: string): ConsoleText {
 	return styled(text, { color: 'black' });
 }
+
 function formatKind(kind: string): ConsoleText {
 	return styled(padStr(`${kind}: `, 10), { color: 'black', bold: true });
 }
+
 function styled(
 	text: string,
 	options: { color: string; strikeThrough?: boolean; bold?: boolean } = {
@@ -292,7 +316,7 @@ function styled(
 	};
 }
 
-export function formatValue(value: unknown, availableLen: number): string {
+function formatValue(value: unknown, availableLen: number): string {
 	switch (typeof value) {
 		case 'number':
 			return '' + value;
@@ -350,9 +374,7 @@ function formatObject(value: object, availableLen: number): string {
 		return val.substring(0, availableLen - 3) + '...';
 	}
 
-	const className = getClassName(value);
-
-	let result = className ? className + '(' : '{ ';
+	let result = '{ ';
 	let first = true;
 	for (const [key, val] of Object.entries(value)) {
 		if (!first) {
@@ -365,7 +387,7 @@ function formatObject(value: object, availableLen: number): string {
 		first = false;
 		result += `${key}: ${formatValue(val, availableLen - result.length)}`;
 	}
-	result += className ? ')' : ' }';
+	result += ' }';
 	return result;
 }
 

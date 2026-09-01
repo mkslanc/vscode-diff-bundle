@@ -118,7 +118,7 @@ function formatOwner(owner: object): string {
 	if (id) {
 		return id;
 	}
-	const className = getClassName(owner) ?? 'Object';
+	const className = getClassName(owner);
 	let count = countPerClassName.get(className) ?? 0;
 	count++;
 	countPerClassName.set(className, count);
@@ -127,15 +127,12 @@ function formatOwner(owner: object): string {
 	return result;
 }
 
-export function getClassName(obj: object): string | undefined {
+function getClassName(obj: object): string {
 	const ctor = obj.constructor;
 	if (ctor) {
-		if (ctor.name === 'Object') {
-			return undefined;
-		}
 		return ctor.name;
 	}
-	return undefined;
+	return 'Object';
 }
 
 export function getFunctionName(fn: Function): string | undefined {

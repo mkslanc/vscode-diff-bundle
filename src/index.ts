@@ -1,9 +1,10 @@
 import {ILinesDiffComputerOptions} from "vs/editor/common/diff/linesDiffComputer";
-import {LegacyLinesDiffComputer} from "vs/editor/common/diff/legacyLinesDiffComputer";
+import {DefaultLinesDiffComputer} from "vs/editor/common/diff/defaultLinesDiffComputer/defaultLinesDiffComputer";
 
 export function computeDiff(originalLines: string[], modifiedLines: string[], options: ILinesDiffComputerOptions) {
-    let diffComputer = new LegacyLinesDiffComputer();
+    let diffComputer = new DefaultLinesDiffComputer();
     var result = diffComputer.computeDiff(originalLines, modifiedLines, options);
+    console.log(result.moves)
     return result?.changes.map((changes) => {
         let originalStartLineNumber;
         let originalEndLineNumber;

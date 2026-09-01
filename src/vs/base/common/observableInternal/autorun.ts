@@ -3,11 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IObservable, IObservableWithChange, IObserver, IReader } from './base.js';
+import { IChangeContext, IObservable, IObservableWithChange, IObserver, IReader } from './base.js';
 import { DebugNameData} from './debugName.js';
 import { assertFn, BugIndicatingError, IDisposable, markAsDisposed, onBugIndicatingError, trackDisposable } from './commonFacade/deps.js';
-import { getLogger } from './logging/logging.js';
-import { IChangeTracker } from './changeTracker.js';
+import { getLogger } from './logging.js';
 
 /**
  * Runs immediately and whenever a transaction ends and an observed observable changed.
@@ -17,11 +16,14 @@ export function autorun(fn: (reader: IReader) => void): IDisposable {
 	return new AutorunObserver(
 		new DebugNameData(undefined, undefined, fn),
 		fn,
+		undefined,
 		undefined
 	);
 }
 
-export const enum AutorunState {
+
+
+const enum AutorunState {
 	/**
 	 * A dependency could have changed.
 	 * We need to explicitly ask them if at least one dependency changed.
@@ -36,13 +38,12 @@ export const enum AutorunState {
 }
 
 export class AutorunObserver<TChangeSummary = any> implements IObserver, IReader, IDisposable {
-	private _state = AutorunState.stale;
-	private _updateCount = 0;
-	private _disposed = false;
-	private _dependencies = new Set<IObservable<any>>();
-	private _dependenciesToBeRemoved = new Set<IObservable<any>>();
-	private _changeSummary: TChangeSummary | undefined;
-	private _isRunning = false;
+	private state = AutorunState.stale;
+	private updateCount = 0;
+	private disposed = false;
+	private dependencies = new Set<IObservable<any>>();
+	private dependenciesToBeRemoved = new Set<IObservable<any>>();
+	private changeSummary: TChangeSummary | undefined;
 
 	public get debugName(): string {
 		return this._debugNameData.getDebugName(this) ?? '(anonymous)';
@@ -51,63 +52,62 @@ export class AutorunObserver<TChangeSummary = any> implements IObserver, IReader
 	constructor(
 		public readonly _debugNameData: DebugNameData,
 		public readonly _runFn: (reader: IReader, changeSummary: TChangeSummary) => void,
-		private readonly _changeTracker: IChangeTracker<TChangeSummary> | undefined,
+		private readonly createChangeSummary: (() => TChangeSummary) | undefined,
+		private readonly _handleChange: ((context: IChangeContext, summary: TChangeSummary) => boolean) | undefined,
 	) {
-		this._changeSummary = this._changeTracker?.createChangeSummary(undefined);
+		this.changeSummary = this.createChangeSummary?.();
 		getLogger()?.handleAutorunCreated(this);
-		this._run();
+		this._runIfNeeded();
 
 		trackDisposable(this);
 	}
 
 	public dispose(): void {
-		if (this._disposed) {
-			return;
+		this.disposed = true;
+		for (const o of this.dependencies) {
+			o.removeObserver(this);
 		}
-		this._disposed = true;
-		for (const o of this._dependencies) {
-			o.removeObserver(this); // Warning: external call!
-		}
-		this._dependencies.clear();
+		this.dependencies.clear();
 
-		getLogger()?.handleAutorunDisposed(this);
 		markAsDisposed(this);
 	}
 
-	private _run() {
-		const emptySet = this._dependenciesToBeRemoved;
-		this._dependenciesToBeRemoved = this._dependencies;
-		this._dependencies = emptySet;
+	private _runIfNeeded() {
+		if (this.state === AutorunState.upToDate) {
+			return;
+		}
 
-		this._state = AutorunState.upToDate;
+		const emptySet = this.dependenciesToBeRemoved;
+		this.dependenciesToBeRemoved = this.dependencies;
+		this.dependencies = emptySet;
 
+		this.state = AutorunState.upToDate;
+
+		const isDisposed = this.disposed;
 		try {
-			if (!this._disposed) {
-				getLogger()?.handleAutorunStarted(this);
-				const changeSummary = this._changeSummary!;
+			if (!isDisposed) {
+				getLogger()?.handleAutorunTriggered(this);
+				const changeSummary = this.changeSummary!;
 				try {
-					this._isRunning = true;
-					if (this._changeTracker) {
-						this._changeTracker.beforeUpdate?.(this, changeSummary);
-						this._changeSummary = this._changeTracker.createChangeSummary(changeSummary); // Warning: external call!
-					}
-					this._runFn(this, changeSummary); // Warning: external call!
+					this.changeSummary = this.createChangeSummary?.();
+					this._isReaderValid = true;
+					this._runFn(this, changeSummary);
 				} catch (e) {
 					onBugIndicatingError(e);
 				} finally {
-					this._isRunning = false;
+					this._isReaderValid = false;
 				}
 			}
 		} finally {
-			if (!this._disposed) {
+			if (!isDisposed) {
 				getLogger()?.handleAutorunFinished(this);
 			}
 			// We don't want our observed observables to think that they are (not even temporarily) not being observed.
 			// Thus, we only unsubscribe from observables that are definitely not read anymore.
-			for (const o of this._dependenciesToBeRemoved) {
-				o.removeObserver(this); // Warning: external call!
+			for (const o of this.dependenciesToBeRemoved) {
+				o.removeObserver(this);
 			}
-			this._dependenciesToBeRemoved.clear();
+			this.dependenciesToBeRemoved.clear();
 		}
 	}
 
@@ -116,58 +116,54 @@ export class AutorunObserver<TChangeSummary = any> implements IObserver, IReader
 	}
 
 	// IObserver implementation
-	public beginUpdate(_observable: IObservable<any>): void {
-		if (this._state === AutorunState.upToDate) {
-			this._state = AutorunState.dependenciesMightHaveChanged;
+	public beginUpdate(): void {
+		if (this.state === AutorunState.upToDate) {
+			this.state = AutorunState.dependenciesMightHaveChanged;
 		}
-		this._updateCount++;
+		this.updateCount++;
 	}
 
-	public endUpdate(_observable: IObservable<any>): void {
+	public endUpdate(): void {
 		try {
-			if (this._updateCount === 1) {
+			if (this.updateCount === 1) {
 				do {
-					if (this._state === AutorunState.dependenciesMightHaveChanged) {
-						this._state = AutorunState.upToDate;
-						for (const d of this._dependencies) {
-							d.reportChanges(); // Warning: external call!
-							if (this._state as AutorunState === AutorunState.stale) {
+					if (this.state === AutorunState.dependenciesMightHaveChanged) {
+						this.state = AutorunState.upToDate;
+						for (const d of this.dependencies) {
+							d.reportChanges();
+							if (this.state as AutorunState === AutorunState.stale) {
 								// The other dependencies will refresh on demand
 								break;
 							}
 						}
 					}
 
-					if (this._state !== AutorunState.upToDate) {
-						this._run(); // Warning: indirect external call!
-					}
-				} while (this._state !== AutorunState.upToDate);
+					this._runIfNeeded();
+				} while (this.state !== AutorunState.upToDate);
 			}
 		} finally {
-			this._updateCount--;
+			this.updateCount--;
 		}
 
-		assertFn(() => this._updateCount >= 0);
+		assertFn(() => this.updateCount >= 0);
 	}
 
 	public handlePossibleChange(observable: IObservable<any>): void {
-		if (this._state === AutorunState.upToDate && this._isDependency(observable)) {
-			this._state = AutorunState.dependenciesMightHaveChanged;
+		if (this.state === AutorunState.upToDate && this.dependencies.has(observable) && !this.dependenciesToBeRemoved.has(observable)) {
+			this.state = AutorunState.dependenciesMightHaveChanged;
 		}
 	}
 
 	public handleChange<T, TChange>(observable: IObservableWithChange<T, TChange>, change: TChange): void {
-		if (this._isDependency(observable)) {
-			getLogger()?.handleAutorunDependencyChanged(this, observable, change);
+		if (this.dependencies.has(observable) && !this.dependenciesToBeRemoved.has(observable)) {
 			try {
-				// Warning: external call!
-				const shouldReact = this._changeTracker ? this._changeTracker.handleChange({
+				const shouldReact = this._handleChange ? this._handleChange({
 					changedObservable: observable,
 					change,
 					didChange: (o): this is any => o === observable as any,
-				}, this._changeSummary!) : true;
+				}, this.changeSummary!) : true;
 				if (shouldReact) {
-					this._state = AutorunState.stale;
+					this.state = AutorunState.stale;
 				}
 			} catch (e) {
 				onBugIndicatingError(e);
@@ -175,42 +171,22 @@ export class AutorunObserver<TChangeSummary = any> implements IObserver, IReader
 		}
 	}
 
-	private _isDependency(observable: IObservableWithChange<any, any>): boolean {
-		return this._dependencies.has(observable) && !this._dependenciesToBeRemoved.has(observable);
-	}
-
 	// IReader implementation
+	private _isReaderValid = false;
 
 	public readObservable<T>(observable: IObservable<T>): T {
-		if (!this._isRunning) { throw new BugIndicatingError('The reader object cannot be used outside its compute function!'); }
+		if (!this._isReaderValid) { throw new BugIndicatingError('The reader object cannot be used outside its compute function!'); }
 
 		// In case the run action disposes the autorun
-		if (this._disposed) {
-			return observable.get(); // warning: external call!
+		if (this.disposed) {
+			return observable.get();
 		}
 
-		observable.addObserver(this); // warning: external call!
-		const value = observable.get(); // warning: external call!
-		this._dependencies.add(observable);
-		this._dependenciesToBeRemoved.delete(observable);
+		observable.addObserver(this);
+		const value = observable.get();
+		this.dependencies.add(observable);
+		this.dependenciesToBeRemoved.delete(observable);
 		return value;
-	}
-
-	public debugGetState() {
-		return {
-			isRunning: this._isRunning,
-			updateCount: this._updateCount,
-			dependencies: this._dependencies,
-			state: this._state,
-		};
-	}
-
-	public debugRerun(): void {
-		if (!this._isRunning) {
-			this._run();
-		} else {
-			this._state = AutorunState.stale;
-		}
 	}
 }
 

@@ -11,7 +11,6 @@ import { OffsetRange } from './offsetRange.js';
  * Use `TextEdit` to describe edits for a 1-based line/column text.
 */
 export class OffsetEdit {
-
 	public static readonly empty = new OffsetEdit([]);
 
 	constructor(
