@@ -3,19 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { BugIndicatingError } from '../../../base/common/errors.js';
+import { BugIndicatingError } from '../../../../base/common/errors.js';
 import { OffsetRange } from './offsetRange.js';
-import { Range } from './range.js';
-import { findFirstIdxMonotonousOrArrLen, findLastIdxMonotonous, findLastMonotonous } from '../../../base/common/arraysFind.js';
+import { findFirstIdxMonotonousOrArrLen, findLastIdxMonotonous, findLastMonotonous } from '../../../../base/common/arraysFind.js';
+import { Comparator, compareBy, numberComparator } from '../../../../base/common/arrays.js';
 
 /**
  * A range of lines (1-based).
  */
 export class LineRange {
 
-	public static fromRangeInclusive(range: Range): LineRange {
-		return new LineRange(range.startLineNumber, range.endLineNumber + 1);
-	}
+	public static readonly compareByStart: Comparator<LineRange> = compareBy(l => l.startLineNumber, numberComparator);
 
 	public static join(lineRanges: LineRange[]): LineRange {
 		if (lineRanges.length === 0) {
@@ -28,10 +26,6 @@ export class LineRange {
 			endLineNumberExclusive = Math.max(endLineNumberExclusive, lineRanges[i].endLineNumberExclusive);
 		}
 		return new LineRange(startLineNumber, endLineNumberExclusive);
-	}
-
-	public static ofLength(startLineNumber: number, length: number): LineRange {
-		return new LineRange(startLineNumber, startLineNumber + length);
 	}
 
 	/**
@@ -99,15 +93,8 @@ export class LineRange {
 		return undefined;
 	}
 
-	public overlapOrTouch(other: LineRange): boolean {
+	public intersectsOrTouches(other: LineRange): boolean {
 		return this.startLineNumber <= other.endLineNumberExclusive && other.startLineNumber <= this.endLineNumberExclusive;
-	}
-
-	public toInclusiveRange(): Range | null {
-		if (this.isEmpty) {
-			return null;
-		}
-		return new Range(this.startLineNumber, 1, this.endLineNumberExclusive - 1, Number.MAX_SAFE_INTEGER);
 	}
 
 	/**

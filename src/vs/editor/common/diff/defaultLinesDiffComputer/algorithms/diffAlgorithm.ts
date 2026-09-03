@@ -5,7 +5,7 @@
 
 import { forEachAdjacent } from '../../../../../base/common/arrays.js';
 import { BugIndicatingError } from '../../../../../base/common/errors.js';
-import { OffsetRange } from '../../../core/offsetRange.js';
+import { OffsetRange } from '../../../core/ranges/offsetRange.js';
 
 /**
  * Represents a synchronous diff algorithm. Should be executed in a worker.
@@ -186,11 +186,5 @@ export class DateTimeout implements ITimeout {
 			this.valid = false; // timeout reached
 		}
 		return this.valid;
-	}
-
-	public disable() {
-		this.timeout = Number.MAX_SAFE_INTEGER;
-		this.isValid = () => true;
-		this.valid = true;
 	}
 }

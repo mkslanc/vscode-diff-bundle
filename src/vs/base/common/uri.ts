@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { MarshalledId } from './marshallingIds.js';
 import * as paths from './path.js';
 import { isWindows } from './platform.js';
 
@@ -21,7 +20,11 @@ function _validateUri(ret: URI, _strict?: boolean): void {
 	// scheme, https://tools.ietf.org/html/rfc3986#section-3.1
 	// ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
 	if (ret.scheme && !_schemePattern.test(ret.scheme)) {
-		throw new Error('[UriError]: Scheme contains illegal characters.');
+		const matches = [...ret.scheme.matchAll(/[^\w\d+.-]/gu)];
+		const detail = matches.length > 0
+			? ` Found '${matches[0][0]}' at index ${matches[0].index} (${matches.length} total)`
+			: '';
+		throw new Error(`[UriError]: Scheme contains illegal characters.${detail} (len:${ret.scheme.length})`);
 	}
 
 	// path, http://tools.ietf.org/html/rfc3986#section-3.3
@@ -76,7 +79,6 @@ function _referenceResolution(scheme: string, path: string): string {
 
 const _empty = '';
 const _slash = '/';
-const _regexp = /^(([^:/?#]+?):)?(\/\/([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?/;
 
 /**
  * Uniform Resource Identifier (URI) http://tools.ietf.org/html/rfc3986.
@@ -95,23 +97,6 @@ const _regexp = /^(([^:/?#]+?):)?(\/\/([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?/;
  * ```
  */
 export class URI implements UriComponents {
-
-	static isUri(thing: any): thing is URI {
-		if (thing instanceof URI) {
-			return true;
-		}
-		if (!thing) {
-			return false;
-		}
-		return typeof (<URI>thing).authority === 'string'
-			&& typeof (<URI>thing).fragment === 'string'
-			&& typeof (<URI>thing).path === 'string'
-			&& typeof (<URI>thing).query === 'string'
-			&& typeof (<URI>thing).scheme === 'string'
-			&& typeof (<URI>thing).fsPath === 'string'
-			&& typeof (<URI>thing).with === 'function'
-			&& typeof (<URI>thing).toString === 'function';
-	}
 
 	/**
 	 * scheme is the 'http' part of 'http://www.example.com/some/path?query#fragment'.
@@ -255,29 +240,6 @@ export class URI implements UriComponents {
 		return new Uri(scheme, authority, path, query, fragment);
 	}
 
-	// ---- parse & validate ------------------------
-
-	/**
-	 * Creates a new URI from a string, e.g. `http://www.example.com/some/path`,
-	 * `file:///usr/home`, or `scheme:with/path`.
-	 *
-	 * @param value A string which represents an URI (see `URI#toString`).
-	 */
-	static parse(value: string, _strict: boolean = false): URI {
-		const match = _regexp.exec(value);
-		if (!match) {
-			return new Uri(_empty, _empty, _empty, _empty, _empty);
-		}
-		return new Uri(
-			match[2] || _empty,
-			percentDecode(match[4] || _empty),
-			percentDecode(match[5] || _empty),
-			percentDecode(match[7] || _empty),
-			percentDecode(match[9] || _empty),
-			_strict
-		);
-	}
-
 	/**
 	 * Creates a new URI from a file system path, e.g. `c:\my\files`,
 	 * `/usr/home`, or `\\server\share\some\path`.
@@ -327,25 +289,6 @@ export class URI implements UriComponents {
 	}
 
 	/**
-	 * Creates new URI from uri components.
-	 *
-	 * Unless `strict` is `true` the scheme is defaults to be `file`. This function performs
-	 * validation and should be used for untrusted uri components retrieved from storage,
-	 * user input, command arguments etc
-	 */
-	static from(components: UriComponents, strict?: boolean): URI {
-		const result = new Uri(
-			components.scheme,
-			components.authority,
-			components.path,
-			components.query,
-			components.fragment,
-			strict
-		);
-		return result;
-	}
-
-	/**
 	 * Join a URI path with path fragments and normalizes the resulting path.
 	 *
 	 * @param uri The input URI.
@@ -354,7 +297,7 @@ export class URI implements UriComponents {
 	 */
 	static joinPath(uri: URI, ...pathFragment: string[]): URI {
 		if (!uri.path) {
-			throw new Error(`[UriError]: cannot call joinPath on URI without path`);
+			throw new Error(`[UriError]: cannot call joinPath on URI without path: ${uri.toString()}`);
 		}
 		let newPath: string;
 		if (isWindows && uri.scheme === 'file') {
@@ -382,37 +325,6 @@ export class URI implements UriComponents {
 		return _asFormatted(this, skipEncoding);
 	}
 
-	toJSON(): UriComponents {
-		return this;
-	}
-
-	/**
-	 * A helper function to revive URIs.
-	 *
-	 * **Note** that this function should only be used when receiving URI#toJSON generated data
-	 * and that it doesn't do any validation. Use {@link URI.from} when received "untrusted"
-	 * uri components such as command arguments or data from storage.
-	 *
-	 * @param data The URI components or URI to revive.
-	 * @returns The revived URI or undefined or null.
-	 */
-	static revive(data: UriComponents | URI): URI;
-	static revive(data: UriComponents | URI | undefined): URI | undefined;
-	static revive(data: UriComponents | URI | null): URI | null;
-	static revive(data: UriComponents | URI | undefined | null): URI | undefined | null;
-	static revive(data: UriComponents | URI | undefined | null): URI | undefined | null {
-		if (!data) {
-			return data;
-		} else if (data instanceof URI) {
-			return data;
-		} else {
-			const result = new Uri(data);
-			result._formatted = (<UriState>data).external ?? null;
-			result._fsPath = (<UriState>data)._sep === _pathSepMarker ? (<UriState>data).fsPath ?? null : null;
-			return result;
-		}
-	}
-
 	[Symbol.for('debug.description')]() {
 		return `URI(${this.toString()})`;
 	}
@@ -426,14 +338,7 @@ export interface UriComponents {
 	fragment?: string;
 }
 
-interface UriState extends UriComponents {
-	$mid: MarshalledId.Uri;
-	external?: string;
-	fsPath?: string;
-	_sep?: 1;
-}
 
-const _pathSepMarker = isWindows ? 1 : undefined;
 
 // This class exists so that URI is compatible with vscode.Uri (API).
 class Uri extends URI {
@@ -458,42 +363,6 @@ class Uri extends URI {
 			// we don't cache that
 			return _asFormatted(this, true);
 		}
-	}
-
-	override toJSON(): UriComponents {
-		// eslint-disable-next-line local/code-no-dangerous-type-assertions
-		const res = <UriState>{
-			$mid: MarshalledId.Uri
-		};
-		// cached state
-		if (this._fsPath) {
-			res.fsPath = this._fsPath;
-			res._sep = _pathSepMarker;
-		}
-		if (this._formatted) {
-			res.external = this._formatted;
-		}
-		//--- uri components
-		if (this.path) {
-			res.path = this.path;
-		}
-		// TODO
-		// this isn't correct and can violate the UriComponents contract but
-		// this is part of the vscode.Uri API and we shouldn't change how that
-		// works anymore
-		if (this.scheme) {
-			res.scheme = this.scheme;
-		}
-		if (this.authority) {
-			res.authority = this.authority;
-		}
-		if (this.query) {
-			res.query = this.query;
-		}
-		if (this.fragment) {
-			res.fragment = this.fragment;
-		}
-		return res;
 	}
 }
 
@@ -709,26 +578,8 @@ function _asFormatted(uri: URI, skipEncoding: boolean): string {
 
 // --- decode
 
-function decodeURIComponentGraceful(str: string): string {
-	try {
-		return decodeURIComponent(str);
-	} catch {
-		if (str.length > 3) {
-			return str.substr(0, 3) + decodeURIComponentGraceful(str.substr(3));
-		} else {
-			return str;
-		}
-	}
-}
 
-const _rEncodedAsHex = /(%[0-9A-Za-z][0-9A-Za-z])+/g;
 
-function percentDecode(str: string): string {
-	if (!str.match(_rEncodedAsHex)) {
-		return str;
-	}
-	return str.replace(_rEncodedAsHex, (match) => decodeURIComponentGraceful(match));
-}
 
 /**
  * Mapped-type that replaces all occurrences of URI with UriComponents

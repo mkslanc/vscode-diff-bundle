@@ -5,9 +5,7 @@
 
 import { CancellationToken } from './cancellation.js';
 import { onUnexpectedError } from './errors.js';
-import { createSingleCallFunction } from './functional.js';
-import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable } from './lifecycle.js';
-import { LinkedList } from './linkedList.js';
+import { Disposable, DisposableStore, IDisposable, toDisposable } from './lifecycle.js';
 import { IObservable, IObserver } from './observable.js';
 import { StopWatch } from './stopwatch.js';
 
@@ -24,6 +22,9 @@ const _enableDisposeWithListenerWarning = false
 // Uncomment the next line to print warnings whenever a snapshotted event is used repeatedly without cleanup.
 // See https://github.com/microsoft/vscode/issues/142851
 // -----------------------------------------------------------------------------------------------------------------------
+
+
+
 
 /**
  * An event with zero or one parameters that can be subscribed to. The event is a function itself.
@@ -95,11 +96,7 @@ export namespace Event {
 				}
 			};
 
-			if (disposables instanceof DisposableStore) {
-				disposables.add(disposable);
-			} else if (Array.isArray(disposables)) {
-				disposables.push(disposable);
-			}
+			addToDisposables(disposable, disposables);
 
 			return disposable;
 		};
@@ -139,6 +136,11 @@ export interface EmitterOptions {
 	 * @see setGlobalLeakWarningThreshold
 	 */
 	leakWarningThreshold?: number;
+	/**
+	 * Human-readable name for the emitter, included in leak warning error
+	 * messages to help identify which emitter is leaking in telemetry.
+	 */
+	leakWarningName?: string;
 	/**
 	 * Pass in a delivery queue, which is useful for ensuring
 	 * in order event delivery across multiple emitters.
@@ -187,9 +189,13 @@ export class EventProfiling {
 
 let _globalLeakWarningThreshold = -1;
 
-class LeakageMonitor {
+let leakageMonitorId = 1;
 
-	private static _idPool = 1;
+function nextLeakageMonitorName(): string {
+	return (leakageMonitorId++).toString(16).padStart(3, '0');
+}
+
+class LeakageMonitor {
 
 	private _stacks: Map<string, number> | undefined;
 	private _warnCountdown: number = 0;
@@ -197,7 +203,7 @@ class LeakageMonitor {
 	constructor(
 		private readonly _errorHandler: (err: Error) => void,
 		readonly threshold: number,
-		readonly name: string = (LeakageMonitor._idPool++).toString(16).padStart(3, '0')
+		readonly name: string = nextLeakageMonitorName()
 	) { }
 
 	dispose(): void {
@@ -214,8 +220,9 @@ class LeakageMonitor {
 		if (!this._stacks) {
 			this._stacks = new Map();
 		}
-		const count = (this._stacks.get(stack.value) || 0);
-		this._stacks.set(stack.value, count + 1);
+		const stackKey = stack.value;
+		const count = (this._stacks.get(stackKey) || 0);
+		this._stacks.set(stackKey, count + 1);
 		this._warnCountdown -= 1;
 
 		if (this._warnCountdown <= 0) {
@@ -224,17 +231,23 @@ class LeakageMonitor {
 			this._warnCountdown = threshold * 0.5;
 
 			const [topStack, topCount] = this.getMostFrequentStack()!;
+			const emitterName = /^[0-9a-f]+$/i.test(this.name) ? undefined : this.name;
 			const message = `[${this.name}] potential listener LEAK detected, having ${listenerCount} listeners already. MOST frequent listener (${topCount}):`;
 			console.warn(message);
-			console.warn(topStack!);
+			console.warn(topStack);
 
-			const error = new ListenerLeakError(message, topStack);
+			const kind = topCount / listenerCount > 0.3 ? 'dominated' : 'popular';
+			const error = new ListenerLeakError(kind, message, topStack, listenerCount, emitterName);
 			this._errorHandler(error);
 		}
 
 		return () => {
-			const count = (this._stacks!.get(stack.value) || 0);
-			this._stacks!.set(stack.value, count - 1);
+			const count = (this._stacks!.get(stackKey) || 0);
+			if (count <= 1) {
+				this._stacks!.delete(stackKey);
+			} else {
+				this._stacks!.set(stackKey, count - 1);
+			}
 		};
 	}
 
@@ -270,20 +283,33 @@ class Stacktrace {
 
 // error that is logged when going over the configured listener threshold
 export class ListenerLeakError extends Error {
-	constructor(message: string, stack: string) {
-		super(message);
+	readonly kind: string;
+	readonly listenerCount: number;
+	/**
+	 * The detailed message including listener count and most frequent stack.
+	 * Available locally for debugging but intentionally not used as the error
+	 * `message`. When `emitterName` is provided, errors group by emitter name
+	 * and kind in telemetry; otherwise they group by kind alone.
+	 */
+	readonly details: string;
+	constructor(kind: 'dominated' | 'popular', details: string, stack: string, listenerCount: number, emitterName?: string) {
+		super(emitterName
+			? `[${emitterName}] potential listener LEAK detected, ${kind}`
+			: `potential listener LEAK detected, ${kind}`);
 		this.name = 'ListenerLeakError';
+		this.kind = kind;
+		this.listenerCount = listenerCount;
+		this.details = details;
 		this.stack = stack;
 	}
 }
 
 // SEVERE error that is logged when having gone way over the configured listener
 // threshold so that the emitter refuses to accept more listeners
-export class ListenerRefusalError extends Error {
-	constructor(message: string, stack: string) {
-		super(message);
+export class ListenerRefusalError extends ListenerLeakError {
+	constructor(kind: 'dominated' | 'popular', details: string, stack: string, listenerCount: number, emitterName?: string) {
+		super(kind, details, stack, listenerCount, emitterName);
 		this.name = 'ListenerRefusalError';
-		this.stack = stack;
 	}
 }
 
@@ -335,7 +361,10 @@ const forEachListener = <T>(listeners: ListenerOrListeners<T>, fn: (c: ListenerC
 export class Emitter<T> {
 
 	private readonly _options?: EmitterOptions;
-	private readonly _leakageMon?: LeakageMonitor;
+	private readonly _leakWarningThreshold?: number;
+	private readonly _leakWarningName?: string;
+	private readonly _leakWarningErrorHandler?: (err: Error) => void;
+	private _leakageMon?: LeakageMonitor;
 	private readonly _perfMon?: EventProfiling;
 	private _disposed?: true;
 	private _event?: Event<T>;
@@ -369,11 +398,20 @@ export class Emitter<T> {
 
 	constructor(options?: EmitterOptions) {
 		this._options = options;
-		this._leakageMon = (_globalLeakWarningThreshold > 0 || this._options?.leakWarningThreshold)
-			? new LeakageMonitor(options?.onListenerError ?? onUnexpectedError, this._options?.leakWarningThreshold ?? _globalLeakWarningThreshold) :
-			undefined;
+		if (_globalLeakWarningThreshold > 0 || this._options?.leakWarningThreshold) {
+			this._leakWarningThreshold = this._options?.leakWarningThreshold ?? _globalLeakWarningThreshold;
+			this._leakWarningName = this._options?.leakWarningName ?? nextLeakageMonitorName();
+			this._leakWarningErrorHandler = this._options?.onListenerError ?? onUnexpectedError;
+		}
 		this._perfMon = this._options?._profName ? new EventProfiling(this._options._profName) : undefined;
 		this._deliveryQueue = this._options?.deliveryQueue as EventDeliveryQueuePrivate | undefined;
+	}
+
+	private _getLeakageMonitor(): LeakageMonitor | undefined {
+		if (this._leakWarningThreshold === undefined || this._leakWarningName === undefined || this._leakWarningErrorHandler === undefined) {
+			return undefined;
+		}
+		return this._leakageMon ??= new LeakageMonitor(this._leakWarningErrorHandler, this._leakWarningThreshold, this._leakWarningName);
 	}
 
 	dispose() {
@@ -415,16 +453,20 @@ export class Emitter<T> {
 	 */
 	get event(): Event<T> {
 		this._event ??= (callback: (e: T) => unknown, thisArgs?: any, disposables?: IDisposable[] | DisposableStore) => {
-			if (this._leakageMon && this._size > this._leakageMon.threshold ** 2) {
-				const message = `[${this._leakageMon.name}] REFUSES to accept new listeners because it exceeded its threshold by far (${this._size} vs ${this._leakageMon.threshold})`;
-				console.warn(message);
+			if (this._leakWarningThreshold !== undefined && this._size > this._leakWarningThreshold ** 2) {
+				const leakageMon = this._getLeakageMonitor();
+				if (leakageMon) {
+					const message = `[${leakageMon.name}] REFUSES to accept new listeners because it exceeded its threshold by far (${this._size} vs ${leakageMon.threshold})`;
+					console.warn(message);
 
-				const tuple = this._leakageMon.getMostFrequentStack() ?? ['UNKNOWN stack', -1];
-				const error = new ListenerRefusalError(`${message}. HINT: Stack shows most frequent listener (${tuple[1]}-times)`, tuple[0]);
-				const errorHandler = this._options?.onListenerError || onUnexpectedError;
-				errorHandler(error);
+					const tuple = leakageMon.getMostFrequentStack() ?? ['UNKNOWN stack', -1];
+					const kind = tuple[1] / this._size > 0.3 ? 'dominated' : 'popular';
+					const error = new ListenerRefusalError(kind, `${message}. HINT: Stack shows most frequent listener (${tuple[1]}-times)`, tuple[0], this._size, this._options?.leakWarningName);
+					const errorHandler = this._options?.onListenerError || onUnexpectedError;
+					errorHandler(error);
 
-				return Disposable.None;
+					return Disposable.None;
+				}
 			}
 
 			if (this._disposed) {
@@ -440,10 +482,13 @@ export class Emitter<T> {
 
 			let removeMonitor: Function | undefined;
 			let stack: Stacktrace | undefined;
-			if (this._leakageMon && this._size >= Math.ceil(this._leakageMon.threshold * 0.2)) {
-				// check and record this emitter for potential leakage
-				contained.stack = Stacktrace.create();
-				removeMonitor = this._leakageMon.check(contained.stack, this._size + 1);
+			if (this._leakWarningThreshold !== undefined && this._size >= Math.ceil(this._leakWarningThreshold * 0.2)) {
+				const leakageMon = this._getLeakageMonitor();
+				if (leakageMon) {
+					// check and record this emitter for potential leakage
+					contained.stack = Stacktrace.create();
+					removeMonitor = leakageMon.check(contained.stack, this._size + 1);
+				}
 			}
 
 			if (_enableDisposeWithListenerWarning) {
@@ -469,11 +514,7 @@ export class Emitter<T> {
 				removeMonitor?.();
 				this._removeListener(contained);
 			});
-			if (disposables instanceof DisposableStore) {
-				disposables.add(result);
-			} else if (Array.isArray(disposables)) {
-				disposables.push(result);
-			}
+			addToDisposables(result, disposables);
 
 			return result;
 		};
@@ -578,10 +619,6 @@ export class Emitter<T> {
 
 		this._perfMon?.stop();
 	}
-
-	hasListeners(): boolean {
-		return this._size > 0;
-	}
 }
 
 export interface EventDeliveryQueue {
@@ -633,363 +670,8 @@ export interface IWaitUntil {
 
 export type IWaitUntilData<T> = Omit<Omit<T, 'waitUntil'>, 'token'>;
 
-export class AsyncEmitter<T extends IWaitUntil> extends Emitter<T> {
-
-	private _asyncDeliveryQueue?: LinkedList<[(ev: T) => void, IWaitUntilData<T>]>;
-
-	async fireAsync(data: IWaitUntilData<T>, token: CancellationToken, promiseJoin?: (p: Promise<unknown>, listener: Function) => Promise<unknown>): Promise<void> {
-		if (!this._listeners) {
-			return;
-		}
-
-		if (!this._asyncDeliveryQueue) {
-			this._asyncDeliveryQueue = new LinkedList();
-		}
-
-		forEachListener(this._listeners, listener => this._asyncDeliveryQueue!.push([listener.value, data]));
-
-		while (this._asyncDeliveryQueue.size > 0 && !token.isCancellationRequested) {
-
-			const [listener, data] = this._asyncDeliveryQueue.shift()!;
-			const thenables: Promise<unknown>[] = [];
-
-			// eslint-disable-next-line local/code-no-dangerous-type-assertions
-			const event = <T>{
-				...data,
-				token,
-				waitUntil: (p: Promise<unknown>): void => {
-					if (Object.isFrozen(thenables)) {
-						throw new Error('waitUntil can NOT be called asynchronous');
-					}
-					if (promiseJoin) {
-						p = promiseJoin(p, listener);
-					}
-					thenables.push(p);
-				}
-			};
-
-			try {
-				listener(event);
-			} catch (e) {
-				onUnexpectedError(e);
-				continue;
-			}
-
-			// freeze thenables-collection to enforce sync-calls to
-			// wait until and then wait for all thenables to resolve
-			Object.freeze(thenables);
-
-			await Promise.allSettled(thenables).then(values => {
-				for (const value of values) {
-					if (value.status === 'rejected') {
-						onUnexpectedError(value.reason);
-					}
-				}
-			});
-		}
-	}
-}
-
-
-export class PauseableEmitter<T> extends Emitter<T> {
-
-	private _isPaused = 0;
-	protected _eventQueue = new LinkedList<T>();
-	private _mergeFn?: (input: T[]) => T;
-
-	public get isPaused(): boolean {
-		return this._isPaused !== 0;
-	}
-
-	constructor(options?: EmitterOptions & { merge?: (input: T[]) => T }) {
-		super(options);
-		this._mergeFn = options?.merge;
-	}
-
-	pause(): void {
-		this._isPaused++;
-	}
-
-	resume(): void {
-		if (this._isPaused !== 0 && --this._isPaused === 0) {
-			if (this._mergeFn) {
-				// use the merge function to create a single composite
-				// event. make a copy in case firing pauses this emitter
-				if (this._eventQueue.size > 0) {
-					const events = Array.from(this._eventQueue);
-					this._eventQueue.clear();
-					super.fire(this._mergeFn(events));
-				}
-
-			} else {
-				// no merging, fire each event individually and test
-				// that this emitter isn't paused halfway through
-				while (!this._isPaused && this._eventQueue.size !== 0) {
-					super.fire(this._eventQueue.shift()!);
-				}
-			}
-		}
-	}
-
-	override fire(event: T): void {
-		if (this._size) {
-			if (this._isPaused !== 0) {
-				this._eventQueue.push(event);
-			} else {
-				super.fire(event);
-			}
-		}
-	}
-}
-
-export class DebounceEmitter<T> extends PauseableEmitter<T> {
-
-	private readonly _delay: number;
-	private _handle: any | undefined;
-
-	constructor(options: EmitterOptions & { merge: (input: T[]) => T; delay?: number }) {
-		super(options);
-		this._delay = options.delay ?? 100;
-	}
-
-	override fire(event: T): void {
-		if (!this._handle) {
-			this.pause();
-			this._handle = setTimeout(() => {
-				this._handle = undefined;
-				this.resume();
-			}, this._delay);
-		}
-		super.fire(event);
-	}
-}
-
-/**
- * An emitter which queue all events and then process them at the
- * end of the event loop.
- */
-export class MicrotaskEmitter<T> extends Emitter<T> {
-	private _queuedEvents: T[] = [];
-	private _mergeFn?: (input: T[]) => T;
-
-	constructor(options?: EmitterOptions & { merge?: (input: T[]) => T }) {
-		super(options);
-		this._mergeFn = options?.merge;
-	}
-	override fire(event: T): void {
-
-		if (!this.hasListeners()) {
-			return;
-		}
-
-		this._queuedEvents.push(event);
-		if (this._queuedEvents.length === 1) {
-			queueMicrotask(() => {
-				if (this._mergeFn) {
-					super.fire(this._mergeFn(this._queuedEvents));
-				} else {
-					this._queuedEvents.forEach(e => super.fire(e));
-				}
-				this._queuedEvents = [];
-			});
-		}
-	}
-}
-
-/**
- * An event emitter that multiplexes many events into a single event.
- *
- * @example Listen to the `onData` event of all `Thing`s, dynamically adding and removing `Thing`s
- * to the multiplexer as needed.
- *
- * ```typescript
- * const anythingDataMultiplexer = new EventMultiplexer<{ data: string }>();
- *
- * const thingListeners = DisposableMap<Thing, IDisposable>();
- *
- * thingService.onDidAddThing(thing => {
- *   thingListeners.set(thing, anythingDataMultiplexer.add(thing.onData);
- * });
- * thingService.onDidRemoveThing(thing => {
- *   thingListeners.deleteAndDispose(thing);
- * });
- *
- * anythingDataMultiplexer.event(e => {
- *   console.log('Something fired data ' + e.data)
- * });
- * ```
- */
-export class EventMultiplexer<T> implements IDisposable {
-
-	private readonly emitter: Emitter<T>;
-	private hasListeners = false;
-	private events: { event: Event<T>; listener: IDisposable | null }[] = [];
-
-	constructor() {
-		this.emitter = new Emitter<T>({
-			onWillAddFirstListener: () => this.onFirstListenerAdd(),
-			onDidRemoveLastListener: () => this.onLastListenerRemove()
-		});
-	}
-
-	get event(): Event<T> {
-		return this.emitter.event;
-	}
-
-	add(event: Event<T>): IDisposable {
-		const e = { event: event, listener: null };
-		this.events.push(e);
-
-		if (this.hasListeners) {
-			this.hook(e);
-		}
-
-		const dispose = () => {
-			if (this.hasListeners) {
-				this.unhook(e);
-			}
-
-			const idx = this.events.indexOf(e);
-			this.events.splice(idx, 1);
-		};
-
-		return toDisposable(createSingleCallFunction(dispose));
-	}
-
-	private onFirstListenerAdd(): void {
-		this.hasListeners = true;
-		this.events.forEach(e => this.hook(e));
-	}
-
-	private onLastListenerRemove(): void {
-		this.hasListeners = false;
-		this.events.forEach(e => this.unhook(e));
-	}
-
-	private hook(e: { event: Event<T>; listener: IDisposable | null }): void {
-		e.listener = e.event(r => this.emitter.fire(r));
-	}
-
-	private unhook(e: { event: Event<T>; listener: IDisposable | null }): void {
-		e.listener?.dispose();
-		e.listener = null;
-	}
-
-	dispose(): void {
-		this.emitter.dispose();
-
-		for (const e of this.events) {
-			e.listener?.dispose();
-		}
-		this.events = [];
-	}
-}
-
 export interface IDynamicListEventMultiplexer<TEventType> extends IDisposable {
 	readonly event: Event<TEventType>;
-}
-export class DynamicListEventMultiplexer<TItem, TEventType> implements IDynamicListEventMultiplexer<TEventType> {
-	private readonly _store = new DisposableStore();
-
-	readonly event: Event<TEventType>;
-
-	constructor(
-		items: TItem[],
-		onAddItem: Event<TItem>,
-		onRemoveItem: Event<TItem>,
-		getEvent: (item: TItem) => Event<TEventType>
-	) {
-		const multiplexer = this._store.add(new EventMultiplexer<TEventType>());
-		const itemListeners = this._store.add(new DisposableMap<TItem, IDisposable>());
-
-		function addItem(instance: TItem) {
-			itemListeners.set(instance, multiplexer.add(getEvent(instance)));
-		}
-
-		// Existing items
-		for (const instance of items) {
-			addItem(instance);
-		}
-
-		// Added items
-		this._store.add(onAddItem(instance => {
-			addItem(instance);
-		}));
-
-		// Removed items
-		this._store.add(onRemoveItem(instance => {
-			itemListeners.deleteAndDispose(instance);
-		}));
-
-		this.event = multiplexer.event;
-	}
-
-	dispose() {
-		this._store.dispose();
-	}
-}
-
-/**
- * The EventBufferer is useful in situations in which you want
- * to delay firing your events during some code.
- * You can wrap that code and be sure that the event will not
- * be fired during that wrap.
- *
- * ```
- * const emitter: Emitter;
- * const delayer = new EventDelayer();
- * const delayedEvent = delayer.wrapEvent(emitter.event);
- *
- * delayedEvent(console.log);
- *
- * delayer.bufferEvents(() => {
- *   emitter.fire(); // event will not be fired yet
- * });
- *
- * // event will only be fired at this point
- * ```
- */
-export class EventBufferer {
-}
-
-/**
- * A Relay is an event forwarder which functions as a replugabble event pipe.
- * Once created, you can connect an input event to it and it will simply forward
- * events from that input event through its own `event` property. The `input`
- * can be changed at any point in time.
- */
-export class Relay<T> implements IDisposable {
-
-	private listening = false;
-	private inputEvent: Event<T> = Event.None;
-	private inputEventListener: IDisposable = Disposable.None;
-
-	private readonly emitter = new Emitter<T>({
-		onDidAddFirstListener: () => {
-			this.listening = true;
-			this.inputEventListener = this.inputEvent(this.emitter.fire, this.emitter);
-		},
-		onDidRemoveLastListener: () => {
-			this.listening = false;
-			this.inputEventListener.dispose();
-		}
-	});
-
-	readonly event: Event<T> = this.emitter.event;
-
-	set input(event: Event<T>) {
-		this.inputEvent = event;
-
-		if (this.listening) {
-			this.inputEventListener.dispose();
-			this.inputEventListener = event(this.emitter.fire, this.emitter);
-		}
-	}
-
-	dispose() {
-		this.inputEventListener.dispose();
-		this.emitter.dispose();
-	}
 }
 
 export interface IValueWithChangeEvent<T> {
@@ -997,30 +679,13 @@ export interface IValueWithChangeEvent<T> {
 	get value(): T;
 }
 
-export class ValueWithChangeEvent<T> implements IValueWithChangeEvent<T> {
-	public static const<T>(value: T): IValueWithChangeEvent<T> {
-		return new ConstValueWithChangeEvent(value);
-	}
 
-	private readonly _onDidChange = new Emitter<void>();
-	readonly onDidChange: Event<void> = this._onDidChange.event;
 
-	constructor(private _value: T) { }
-
-	get value(): T {
-		return this._value;
-	}
-
-	set value(value: T) {
-		if (value !== this._value) {
-			this._value = value;
-			this._onDidChange.fire(undefined);
-		}
+function addToDisposables(result: IDisposable, disposables: DisposableStore | IDisposable[] | undefined) {
+	if (disposables instanceof DisposableStore) {
+		disposables.add(result);
+	} else if (Array.isArray(disposables)) {
+		disposables.push(result);
 	}
 }
 
-class ConstValueWithChangeEvent<T> implements IValueWithChangeEvent<T> {
-	public readonly onDidChange: Event<void> = Event.None;
-
-	constructor(readonly value: T) { }
-}

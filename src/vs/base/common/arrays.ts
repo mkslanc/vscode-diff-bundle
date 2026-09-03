@@ -28,7 +28,16 @@ export function equals<T>(one: ReadonlyArray<T> | undefined, other: ReadonlyArra
 
 type Compare<T> = (a: T, b: T) => number;
 
-
+/**
+ * Finds the nth smallest element in the array using quickselect algorithm.
+ * The data does not need to be sorted.
+ *
+ * @param nth The zero-based index of the element to find (0 = smallest, 1 = second smallest, etc.)
+ * @param data The unsorted array
+ * @param compare A comparator function that defines the sort order
+ * @returns The nth smallest element
+ * @throws TypeError if nth is >= data.length
+ */
 export function quickSelect<T>(nth: number, data: T[], compare: Compare<T>): T {
 
 	nth = nth | 0;
@@ -60,20 +69,6 @@ export function quickSelect<T>(nth: number, data: T[], compare: Compare<T>): T {
 	} else {
 		return quickSelect(nth - (lower.length + pivots.length), higher, compare);
 	}
-}
-
-export function groupBy<T>(data: ReadonlyArray<T>, compare: (a: T, b: T) => number): T[][] {
-	const result: T[][] = [];
-	let currentGroup: T[] | undefined = undefined;
-	for (const element of data.slice(0).sort(compare)) {
-		if (!currentGroup || compare(currentGroup[0], element) !== 0) {
-			currentGroup = [element];
-			result.push(currentGroup);
-		} else {
-			currentGroup.push(element);
-		}
-	}
-	return result;
 }
 
 /**
@@ -119,6 +114,8 @@ export function pushMany<T>(arr: T[], items: ReadonlyArray<T>): void {
 }
 
 
+
+
 /**
  * When comparing two values,
  * a negative number indicates that the first value is less than the second,
@@ -149,30 +146,4 @@ export const booleanComparator: Comparator<boolean> = (a, b) => numberComparator
 
 export function reverseOrder<TItem>(comparator: Comparator<TItem>): Comparator<TItem> {
 	return (a, b) => -comparator(a, b);
-}
-
-export class ArrayQueue<T> {
-	private firstIdx = 0;
-	private lastIdx = this.items.length - 1;
-
-	/**
-	 * Constructs a queue that is backed by the given array. Runtime is O(1).
-	*/
-	constructor(private readonly items: readonly T[]) { }
-
-	get length(): number {
-		return this.lastIdx - this.firstIdx + 1;
-	}
-}
-
-/**
- * This class is faster than an iterator and array for lazy computed data.
-*/
-
-
-/**
- * Represents a re-arrangement of items in an array.
- */
-export class Permutation {
-	constructor() { }
 }

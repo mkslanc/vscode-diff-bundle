@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { LineRange } from '../../core/lineRange.js';
+import { LineRange } from '../../core/ranges/lineRange.js';
 import { DetailedLineRangeMapping } from '../rangeMapping.js';
 
 export class Array2D<T> {

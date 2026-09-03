@@ -1,12 +1,10 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
 
-// eslint-disable-next-line local/code-import-patterns
-// eslint-disable-next-line local/code-import-patterns
-export { getNLSLanguage, getNLSMessages } from './nls.messages.js';
 
+export function getNLSLanguage(): string | undefined {
+	return globalThis._VSCODE_NLS_LANGUAGE;
+}
+
+declare const document: { location?: { hash?: string } } | undefined;
 
 export interface ILocalizeInfo {
 	key: string;

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { OffsetRange } from '../../core/offsetRange.js';
+import { OffsetRange } from '../../core/ranges/offsetRange.js';
 import { ISequence } from './algorithms/diffAlgorithm.js';
 
 export class LineSequence implements ISequence {

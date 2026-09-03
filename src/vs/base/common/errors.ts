@@ -67,6 +67,8 @@ export function onUnexpectedError(e: any): undefined {
 	return undefined;
 }
 
+
+
 export interface SerializedError {
 	readonly $isError: true;
 	readonly name: string;
@@ -86,6 +88,7 @@ export function transformErrorForSerialization(error: any): any;
 export function transformErrorForSerialization(error: any): any {
 	if (error instanceof Error) {
 		const { name, message, cause } = error;
+		// eslint-disable-next-line local/code-no-any-casts
 		const stack: string = (<any>error).stacktrace || (<any>error).stack;
 		return {
 			$isError: true,
@@ -139,7 +142,7 @@ export interface V8CallSite {
 	toString(): string;
 }
 
-const canceledName = 'Canceled';
+export const canceledName = 'Canceled';
 
 /**
  * Checks if the given error is a promise in canceled state
@@ -160,34 +163,6 @@ export class CancellationError extends Error {
 	}
 }
 
-export class ReadonlyError extends TypeError {
-	constructor(name?: string) {
-		super(name ? `${name} is read-only and cannot be changed` : 'Cannot change read-only property');
-	}
-}
-
-export class NotImplementedError extends Error {
-	constructor(message?: string) {
-		super('NotImplemented');
-		if (message) {
-			this.message = message;
-		}
-	}
-}
-
-export class NotSupportedError extends Error {
-	constructor(message?: string) {
-		super('NotSupported');
-		if (message) {
-			this.message = message;
-		}
-	}
-}
-
-export class ExpectedError extends Error {
-	readonly isExpected = true;
-}
-
 /**
  * Error that when thrown won't be logged in telemetry as an unhandled error.
  */
@@ -197,17 +172,6 @@ export class ErrorNoTelemetry extends Error {
 	constructor(msg?: string) {
 		super(msg);
 		this.name = 'CodeExpectedError';
-	}
-
-	public static fromError(err: Error): ErrorNoTelemetry {
-		if (err instanceof ErrorNoTelemetry) {
-			return err;
-		}
-
-		const result = new ErrorNoTelemetry();
-		result.message = err.message;
-		result.stack = err.stack;
-		return result;
 	}
 
 	public static isErrorNoTelemetry(err: Error): err is ErrorNoTelemetry {

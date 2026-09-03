@@ -5,7 +5,6 @@ import {
 } from "vs/editor/common/diff/linesDiffComputer";
 import {equals} from "vs/base/common/arrays";
 import {DetailedLineRangeMapping} from "vs/editor/common/diff/rangeMapping";
-import {LineRange} from "vs/editor/common/core/lineRange";
 import {
     DateTimeout,
     InfiniteTimeout,
@@ -21,6 +20,7 @@ import {
 import {computeMovedLines} from "vs/editor/common/diff/defaultLinesDiffComputer/computeMovedLines";
 import {DefaultLinesDiffComputer} from "vs/editor/common/diff/defaultLinesDiffComputer/defaultLinesDiffComputer";
 import {assertFn} from "vs/base/common/assert";
+import {LineRange} from "vs/editor/common/core/ranges/lineRange";
 
 /**
  * The line-alignment phase of VS Code's DefaultLinesDiffComputer.

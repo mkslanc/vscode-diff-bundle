@@ -6,10 +6,10 @@
 import { groupAdjacentBy } from '../../../base/common/arrays.js';
 import { assertFn, checkAdjacentItems } from '../../../base/common/assert.js';
 import { BugIndicatingError } from '../../../base/common/errors.js';
-import { LineRange } from '../core/lineRange.js';
+import { LineRange } from '../core/ranges/lineRange.js';
 import { Position } from '../core/position.js';
 import { Range } from '../core/range.js';
-import { AbstractText, } from '../core/textEdit.js';
+import { AbstractText } from '../core/text/abstractText.js';
 
 /**
  * Maps a line range in the original text model to a line range in the modified text model.
@@ -39,41 +39,6 @@ export class LineRangeMapping {
 			this.original.join(other.original),
 			this.modified.join(other.modified)
 		);
-	}
-
-	public get changedLineCount() {
-		return Math.max(this.original.length, this.modified.length);
-	}
-
-	/**
-	 * This method assumes that the LineRangeMapping describes a valid diff!
-	 * I.e. if one range is empty, the other range cannot be the entire document.
-	 * It avoids various problems when the line range points to non-existing line-numbers.
-	*/
-	public toRangeMapping(): RangeMapping {
-		const origInclusiveRange = this.original.toInclusiveRange();
-		const modInclusiveRange = this.modified.toInclusiveRange();
-		if (origInclusiveRange && modInclusiveRange) {
-			return new RangeMapping(origInclusiveRange, modInclusiveRange);
-		} else if (this.original.startLineNumber === 1 || this.modified.startLineNumber === 1) {
-			if (!(this.modified.startLineNumber === 1 && this.original.startLineNumber === 1)) {
-				// If one line range starts at 1, the other one must start at 1 as well.
-				throw new BugIndicatingError('not a valid diff');
-			}
-
-			// Because one range is empty and both ranges start at line 1, none of the ranges can cover all lines.
-			// Thus, `endLineNumberExclusive` is a valid line number.
-			return new RangeMapping(
-				new Range(this.original.startLineNumber, 1, this.original.endLineNumberExclusive, 1),
-				new Range(this.modified.startLineNumber, 1, this.modified.endLineNumberExclusive, 1),
-			);
-		} else {
-			// We can assume here that both startLineNumbers are greater than 1.
-			return new RangeMapping(
-				new Range(this.original.startLineNumber - 1, Number.MAX_SAFE_INTEGER, this.original.endLineNumberExclusive - 1, Number.MAX_SAFE_INTEGER),
-				new Range(this.modified.startLineNumber - 1, Number.MAX_SAFE_INTEGER, this.modified.endLineNumberExclusive - 1, Number.MAX_SAFE_INTEGER),
-			);
-		}
 	}
 
 	/**
@@ -146,11 +111,6 @@ function isValidLineNumber(lineNumber: number, lines: string[]): boolean {
  * Also contains inner range mappings.
  */
 export class DetailedLineRangeMapping extends LineRangeMapping {
-	public static fromRangeMappings(rangeMappings: RangeMapping[]): DetailedLineRangeMapping {
-		const originalRange = LineRange.join(rangeMappings.map(r => LineRange.fromRangeInclusive(r.originalRange)));
-		const modifiedRange = LineRange.join(rangeMappings.map(r => LineRange.fromRangeInclusive(r.modifiedRange)));
-		return new DetailedLineRangeMapping(originalRange, modifiedRange, rangeMappings);
-	}
 
 	/**
 	 * If inner changes have not been computed, this is set to undefined.
@@ -167,14 +127,6 @@ export class DetailedLineRangeMapping extends LineRangeMapping {
 	) {
 		super(originalRange, modifiedRange);
 		this.innerChanges = innerChanges;
-	}
-
-	public flip(): DetailedLineRangeMapping {
-		return new DetailedLineRangeMapping(this.modified, this.original, this.innerChanges?.map(c => c.flip()));
-	}
-
-	public withInnerChangesFromLineRanges(): DetailedLineRangeMapping {
-		return new DetailedLineRangeMapping(this.original, this.modified, [this.toRangeMapping()]);
 	}
 }
 
@@ -225,10 +177,6 @@ export class RangeMapping {
 		this.modifiedRange = modifiedRange;
 	}
 
-	public flip(): RangeMapping {
-		return new RangeMapping(this.modifiedRange, this.originalRange);
-	}
-
 	/**
 	 * Creates a single text edit that describes the change from the original to the modified text.
 	*/
@@ -247,8 +195,8 @@ export function lineRangeMappingFromRangeMappings(alignments: readonly RangeMapp
 	for (const g of groupAdjacentBy(
 		alignments.map(a => getLineRangeMapping(a, originalLines, modifiedLines)),
 		(a1, a2) =>
-			a1.original.overlapOrTouch(a2.original)
-			|| a1.modified.overlapOrTouch(a2.modified)
+			a1.original.intersectsOrTouches(a2.original)
+			|| a1.modified.intersectsOrTouches(a2.modified)
 	)) {
 		const first = g[0];
 		const last = g[g.length - 1];
