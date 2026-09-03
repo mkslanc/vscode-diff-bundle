@@ -28,8 +28,6 @@ replaceInFiles("src", function(src, path) {
     src = src.replace(/^export class CallbackIterable[\s\S]*?^}/gm, "");
     src = src.replace(/^export namespace CompareResult[\s\S]*?^}/gm, "");
     
-    src = src.replace(/^\tpublic toTextEdit[\s\S]*?^\t}/gm, "");
-
     src = src.replace(/\bCharCode\.([\w]+)/g, function(_, v) {
         if (!CharCode[v]) {
             console.error(v, _, path)

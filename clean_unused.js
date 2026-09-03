@@ -54,24 +54,40 @@ const compilerOptions = {
     allowJs: true
 };
 
-function findUnusedMethodsAndFunctions(fileNames) {
+function findUnusedDeclarations(fileNames) {
     const program = ts.createProgram(fileNames, compilerOptions);
     const checker = program.getTypeChecker();
 
     const declaredSymbols = new Map();
     const usedSymbols = new Set();
+    const declaredClasses = new Map();
+    const usedClasses = new Set();
 
     fileNames.forEach((fileName) => {
         const sourceFile = program.getSourceFile(fileName);
         if (!sourceFile) return;
 
         ts.forEachChild(sourceFile, function visit(node) {
-            if (ts.isMethodDeclaration(node) && node.name) {
-                const className = getClassName(node);
+            if (ts.isClassDeclaration(node) && node.name) {
+                const symbol = checker.getSymbolAtLocation(node.name);
+                if (symbol) {
+                    declaredClasses.set(symbol, {
+                        name: node.name.getText(),
+                        kind: "class",
+                        file: fileName,
+                        start: node.getFullStart(),
+                        end: node.getEnd(),
+                        declaration: node
+                    });
+                }
+            }
+
+            if (isMethodLikeDeclaration(node) && node.name) {
+                const className = getClassName(node, checker);
                 if (className) {
                     const methodName = `${className}.${node.name.getText()}`;
                     declaredSymbols.set(methodName, {
-                        kind: "method",
+                        kind: ts.isMethodDeclaration(node) ? "method" : "accessor",
                         file: fileName,
                         start: node.getFullStart(),
                         end: node.getEnd()
@@ -82,15 +98,6 @@ function findUnusedMethodsAndFunctions(fileNames) {
                 const functionName = `${node.name.getText()}`;
                 declaredSymbols.set(functionName, {
                     kind: "function",
-                    file: fileName,
-                    start: node.getFullStart(),
-                    end: node.getEnd()
-                });
-            }
-            else if (ts.isImportSpecifier(node) && node.name) {
-                const functionName = `${node.name.getText()}`;
-                declaredSymbols.set(functionName, {
-                    kind: "imported-function",
                     file: fileName,
                     start: node.getFullStart(),
                     end: node.getEnd()
@@ -107,23 +114,27 @@ function findUnusedMethodsAndFunctions(fileNames) {
         ts.forEachChild(sourceFile, function visit(node) {
             const symbol = checker.getSymbolAtLocation(node);
             if (symbol) {
+                if (!isDeclarationName(node)) {
+                    markClassAsUsed(symbol, node, checker, declaredClasses, usedClasses);
+                }
+
                 const declarations = symbol.getDeclarations();
-                if (!declarations || declarations.length === 0) return;
+                if (declarations && declarations.length > 0) {
+                    const declaration = declarations[0];
 
-                const declaration = declarations[0];
-
-                // Check if the current node is a call or usage
-                if (isNotDeclaration(node)) {
-                    if (isMethodSymbol(declaration)) {
-                        const className = getClassName(declaration);
-                        if (className) {
-                            const qualifiedName = `${className}.${symbol.getName()}`;
-                            usedSymbols.add(qualifiedName);
+                    // Check if the current node is a call or usage
+                    if (!isDeclarationName(node)) {
+                        if (isMethodLikeDeclaration(declaration)) {
+                            const className = getClassName(declaration, checker);
+                            if (className) {
+                                const qualifiedName = `${className}.${symbol.getName()}`;
+                                usedSymbols.add(qualifiedName);
+                            }
                         }
-                    }
-                    else if (isFunctionSymbol(declaration)) {
-                        const functionName = `${symbol.getName()}`;
-                        usedSymbols.add(functionName);
+                        else if (isFunctionSymbol(declaration)) {
+                            const functionName = `${symbol.getName()}`;
+                            usedSymbols.add(functionName);
+                        }
                     }
                 }
             }
@@ -133,30 +144,20 @@ function findUnusedMethodsAndFunctions(fileNames) {
 
     usedSymbols.add("computeDiff");
 
-    unused = Array.from(declaredSymbols.entries())
+    const unusedMethodsAndFunctions = Array.from(declaredSymbols.entries())
         .filter(([name]) => !usedSymbols.has(name))
         .map(([name, info]) => ({name, ...info}));
+    const unusedClasses = Array.from(declaredClasses.entries())
+        .filter(([symbol]) => !usedClasses.has(symbol))
+        .map(([, info]) => info);
+
+    unused = unusedMethodsAndFunctions.concat(unusedClasses);
 
     const groupedFixes = groupFixesByFile(unused);
 
     applyFixes(groupedFixes);
 
     return groupedFixes;
-
-    // Output the results
-    if (unused.length > 0) {
-        console.log("Unused Methods and Functions:" + unused.length);
-        unused.forEach(({
-                            name,
-                            kind,
-                            file
-                        }) => {
-            console.log(`[${kind.toUpperCase()}] ${name} in ${file}`);
-        });
-    }
-    else {
-        console.log("No unused methods or functions found.");
-    }
 }
 
 function groupFixesByFile(unusedItems) {
@@ -174,12 +175,15 @@ function groupFixesByFile(unusedItems) {
     return fixesByFile;
 }
 
-function getClassName(node) {
+function getClassName(node, checker) {
     let parent = node.parent;
     while (parent) {
         if (ts.isClassDeclaration(parent) && parent.name) {
-            //lets ignore all classes that have a heritage clause
-            if (parent.heritageClauses) {
+            // An override or interface implementation can be used through the
+            // inherited declaration, so that use does not resolve to this node.
+            // Unique members declared by a derived class can still be checked.
+            const isStatic = node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword);
+            if (!isStatic && hasInheritedMember(node, parent, checker)) {
                 return null;
             }
             return parent.name.getText();
@@ -189,12 +193,64 @@ function getClassName(node) {
     return null;
 }
 
-function isNotDeclaration(node) {
-    return !ts.isMethodDeclaration(node.parent) && !ts.isFunctionDeclaration(node.parent);
+function hasInheritedMember(node, classDeclaration, checker) {
+    if (!classDeclaration.heritageClauses) {
+        return false;
+    }
+    if (ts.isComputedPropertyName(node.name)) {
+        return true;
+    }
+
+    const symbol = checker.getSymbolAtLocation(node.name);
+    if (!symbol) {
+        return true;
+    }
+
+    const memberName = symbol.getName();
+    return classDeclaration.heritageClauses.some(clause =>
+        clause.types.some(typeNode =>
+            !!checker.getPropertyOfType(checker.getTypeAtLocation(typeNode), memberName)
+        )
+    );
 }
 
-function isMethodSymbol(declaration) {
-    return ts.isMethodDeclaration(declaration);
+function isDeclarationName(node) {
+    const parent = node.parent;
+    return !!parent && parent.name === node && (
+        isMethodLikeDeclaration(parent)
+        || ts.isFunctionDeclaration(parent)
+        || ts.isImportSpecifier(parent)
+        || ts.isClassDeclaration(parent)
+    );
+}
+
+function markClassAsUsed(symbol, usageNode, checker, declaredClasses, usedClasses) {
+    const symbols = [symbol];
+    if (symbol.flags & ts.SymbolFlags.Alias) {
+        symbols.push(checker.getAliasedSymbol(symbol));
+    }
+
+    for (const referencedSymbol of symbols) {
+        const candidate = declaredClasses.get(referencedSymbol);
+        if (candidate && !isNodeWithin(usageNode, candidate.declaration)) {
+            usedClasses.add(referencedSymbol);
+        }
+    }
+}
+
+function isNodeWithin(node, ancestor) {
+    for (let current = node; current; current = current.parent) {
+        if (current === ancestor) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function isMethodLikeDeclaration(node) {
+    return ts.isMethodDeclaration(node)
+        || ts.isGetAccessorDeclaration(node)
+        || ts.isSetAccessorDeclaration(node);
 }
 
 function isFunctionSymbol(declaration) {
@@ -202,27 +258,19 @@ function isFunctionSymbol(declaration) {
 }
 
 function removeOverlappingChanges(changes) {
-    changes.sort((a, b) => b.end - a.end);
+    changes.sort((a, b) => a.start - b.start || a.end - b.end);
 
     const result = [];
-    for (let i = 0; i < changes.length; i++) {
-        const current = changes[i];
-        let isContained = false;
-
-        for (let j = 0; j < result.length; j++) {
-            const previous = result[j];
-            if (current.start >= previous.start && current.end <= previous.end) {
-                isContained = true;
-                break;
-            }
-        }
-
-        if (!isContained) {
-            result.push(current);
+    for (const current of changes) {
+        const previous = result[result.length - 1];
+        if (previous && current.start <= previous.end) {
+            previous.end = Math.max(previous.end, current.end);
+        } else {
+            result.push({...current});
         }
     }
 
-    return result;
+    return result.reverse();
 }
 
 function applyFixes(sourcesToFix) {
@@ -278,11 +326,9 @@ function useTsQuickFix(declarationNames) {
 
                     fix.changes[0].textChanges.forEach(change => {
                         const changes = sourcesToFix.get(fileName) || [];
-                        const pieceAfter = diagnostic.file.text.slice(change.span.start + change.span.length);
-                        const res = /^[ ,]*/.exec(pieceAfter);
                         changes.push({
                             start: change.span.start,
-                            end: change.span.start + change.span.length + res[0].length
+                            end: change.span.start + change.span.length
                         });
                         sourcesToFix.set(fileName, changes);
                     });
@@ -293,14 +339,16 @@ function useTsQuickFix(declarationNames) {
     });
 
     applyFixes(sourcesToFix);
+    return sourcesToFix.size > 0;
 }
 
-function runCleanUp() {
-    const files = getAllFileNames(__dirname + "/src");
+function runCleanUp(srcDir = path.join(__dirname, "src")) {
+    const files = getAllFileNames(srcDir);
+    let quickFixesApplied;
     do {
-        findUnusedMethodsAndFunctions(files);
-        useTsQuickFix(files);
-    } while (unused.length > 0);
+        findUnusedDeclarations(files);
+        quickFixesApplied = useTsQuickFix(files);
+    } while (unused.length > 0 || quickFixesApplied);
 }
 
 exports.runCleanUp = runCleanUp;
