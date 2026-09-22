@@ -10,11 +10,7 @@ import { TextLength } from '../text/textLength.js';
 export abstract class AbstractText {
 	abstract getValueOfRange(range: Range): string;
 	abstract readonly length: TextLength;
-
-	getLineLength(lineNumber: number): number {
-		return this.getValueOfRange(new Range(lineNumber, 1, lineNumber, Number.MAX_SAFE_INTEGER)).length;
-	}
-
+	abstract getLineLength(lineNumber: number): number;
 }
 
 export class LineBasedText extends AbstractText {

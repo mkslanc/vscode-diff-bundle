@@ -24,6 +24,13 @@ function replaceInFiles(path, fn) {
 replaceInFiles("src", function(src, path) {
     if (/charcode/i.test(path)) return;
     src = src.replace(/(function assertFn\(condition: \(\) => boolean\): void {)[\s\S]*?^}/m, "$1\n\tcondition();\n}")
+
+    if (/\/core\/text\/abstractText\.ts$/.test(path.replace(/\\/g, "/"))) {
+        src = src.replace(
+            /\tgetLineLength\(lineNumber: number\): number \{\r?\n\t\treturn this\.getValueOfRange\(new Range\(lineNumber, 1, lineNumber, Number\.MAX_SAFE_INTEGER\)\)\.length;\r?\n\t}/,
+            "\tabstract getLineLength(lineNumber: number): number;"
+        );
+    }
     
     src = src.replace(/^export class CallbackIterable[\s\S]*?^}/gm, "");
     src = src.replace(/^export namespace CompareResult[\s\S]*?^}/gm, "");

@@ -33,6 +33,10 @@ class DefaultLinesDiffComputerWithSeparateRefinement extends DefaultLinesDiffCom
     private readonly lineDynamicProgrammingDiffing = new DynamicProgrammingDiffing();
     private readonly lineMyersDiffingAlgorithm = new MyersDiffAlgorithm();
 
+    constructor() {
+        super();
+    }
+
     override computeDiff(
         originalLines: string[],
         modifiedLines: string[],
